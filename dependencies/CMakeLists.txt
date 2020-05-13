@@ -9,6 +9,8 @@ add_subdirectory(siaskynetpp)
 # libbitcoin
 find_package(Boost 1.62 REQUIRED
 	COMPONENTS chrono date_time filesystem iostreams locale log_setup program_options regex system thread unit_test_framework)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBSECP256K1 REQUIRED libsecp256k1)
 find_program(LIBTOOLIZE libtoolize)
 if(NOT LIBTOOLIZE)
 	message(FATAL_ERROR "libtool not found")
@@ -25,7 +27,7 @@ ExternalProject_Add(
 	build-libbitcoin-system
 	GIT_REPOSITORY ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system
 	BUILD_IN_SOURCE ON
-	CONFIGURE_COMMAND ./autogen.sh && ./configure --prefix=${LIBBITCOIN_PREFIX}
+	CONFIGURE_COMMAND git config user.name cmake && git config user.email cmake@localhost && ./autogen.sh && ./configure --prefix=${LIBBITCOIN_PREFIX}
 	BUILD_COMMAND make install
 	INSTALL_COMMAND
 	INSTALL_DIR ${LIBBITCOIN_PREFIX}
