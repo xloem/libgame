@@ -1,0 +1,15 @@
+[submodule "dependencies/siaskynetpp"]
+	path = dependencies/siaskynetpp
+	url = https://github.com/xloem/siaskynetpp.git
+[submodule "dependencies/libbitcoin-system"]
+	path = dependencies/libbitcoin-system
+	url = https://github.com/libbitcoin/libbitcoin-system
+[submodule "dependencies/libbitcoin-protocol"]
+	path = dependencies/libbitcoin-protocol
+	url = https://github.com/libbitcoin/libbitcoin-protocol
+[submodule "dependencies/libbitcoin-network"]
+	path = dependencies/libbitcoin-network
+	url = https://github.com/libbitcoin/libbitcoin-network
+[submodule "dependencies/libbitcoin-client"]
+	path = dependencies/libbitcoin-client
+	url = https://github.com/libbitcoin/libbitcoin-client
