@@ -11,6 +11,7 @@ find_package(Boost 1.62 REQUIRED
 	COMPONENTS chrono date_time filesystem iostreams locale log_setup program_options regex system thread unit_test_framework)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBSECP256K1 REQUIRED libsecp256k1)
+pkg_check_modules(ZEROMQ REQUIRED libzmq)
 find_program(LIBTOOLIZE libtoolize)
 if(NOT LIBTOOLIZE)
 	message(FATAL_ERROR "libtool not found")
@@ -20,18 +21,88 @@ if(NOT PKGCONFIG)
 	message(FATAL_ERROR "pkg-config not found")
 endif()
 
+set (EXTERNAL_MAKE_FLAGS "-j2" CACHE STRING "flags passed to make for external projects")
+
 set (LIBBITCOIN_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin CACHE INTERNAL "")
+set (LIBBITCOIN_INCLUDE_DIR ${LIBBITCOIN_PREFIX}/include)
+set (LIBBITCOIN_LIBRARY_DIR ${LIBBITCOIN_PREFIX}/lib)
 set (LIBBITCOIN_LIBRARIES bitcoin-system CACHE INTERNAL "")
 include(ExternalProject)
 ExternalProject_Add(
 	build-libbitcoin-system
-	GIT_REPOSITORY ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system
+	DOWNLOAD_COMMAND
+		rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/. build-libbitcoin-system/. &&
+		cd build-libbitcoin-system &&
+		./autogen.sh &&
+		./configure --prefix=${LIBBITCOIN_PREFIX} --disable-shared
+		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/. build-libbitcoin-system/.
+	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
-	CONFIGURE_COMMAND git config user.name cmake && git config user.email cmake@localhost && ./autogen.sh && ./configure --prefix=${LIBBITCOIN_PREFIX}
-	BUILD_COMMAND make install
-	INSTALL_COMMAND
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
+	INSTALL_COMMAND ""
 	INSTALL_DIR ${LIBBITCOIN_PREFIX}
 )
+add_library(libbitcoin-system STATIC IMPORTED GLOBAL)
+add_dependencies(libbitcoin-system build-libbitcoin-system)
+ExternalProject_Add(
+	build-libbitcoin-protocol
+	DOWNLOAD_COMMAND
+		rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/. build-libbitcoin-protocol/. &&
+		cd build-libbitcoin-protocol &&
+		./autogen.sh &&
+		./configure --prefix=${LIBBITCOIN_PREFIX} --disable-shared
+		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/. build-libbitcoin-protocol/.
+	CONFIGURE_COMMAND ""
+	BUILD_IN_SOURCE ON
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
+	INSTALL_COMMAND ""
+	INSTALL_DIR ${LIBBITCOIN_PREFIX}
+)
+add_dependencies(build-libbitcoin-protocol build-libbitcoin-system)
+add_library(libbitcoin-protocol STATIC IMPORTED GLOBAL)
+add_dependencies(libbitcoin-protocol build-libbitcoin-protocol)
+ExternalProject_Add(
+	build-libbitcoin-network
+	DOWNLOAD_COMMAND
+		rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/. build-libbitcoin-network/. &&
+		cd build-libbitcoin-network &&
+		./autogen.sh &&
+		./configure --prefix=${LIBBITCOIN_PREFIX} --disable-shared
+		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/. build-libbitcoin-network/.
+	CONFIGURE_COMMAND ""
+	BUILD_IN_SOURCE ON
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
+	INSTALL_COMMAND ""
+	INSTALL_DIR ${LIBBITCOIN_PREFIX}
+)
+add_dependencies(build-libbitcoin-network build-libbitcoin-system)
+add_library(libbitcoin-network STATIC IMPORTED GLOBAL)
+add_dependencies(libbitcoin-network build-libbitcoin-network)
+ExternalProject_Add(
+	build-libbitcoin-client
+	DOWNLOAD_COMMAND
+		rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/. build-libbitcoin-client/. &&
+		cd build-libbitcoin-client &&
+		./autogen.sh &&
+		./configure --prefix=${LIBBITCOIN_PREFIX} --disable-shared
+		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/. build-libbitcoin-client/.
+	CONFIGURE_COMMAND ""
+	BUILD_IN_SOURCE ON
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
+	INSTALL_COMMAND ""
+	INSTALL_DIR ${LIBBITCOIN_PREFIX}
+)
+add_dependencies(build-libbitcoin-client build-libbitcoin-protocol)
+add_library(libbitcoin-client STATIC IMPORTED GLOBAL)
+add_dependencies(libbitcoin-client build-libbitcoin-client)
 #file(MAKE_DIRECTORY ${LIBBITCOIN_INCLUDE_DIR})
 #add_custom_command(
 #	OUTPUT test-libbitcoin-system
@@ -43,7 +114,5 @@ ExternalProject_Add(
 #)
 #add_custom_target(build-libbitcoin-system DEPENDS test-libbitcoin-system)
 ##add_custom_target(build-libbitcoin-system DEPENDS test-libbitcoin-system)
-add_library(libbitcoin-system STATIC IMPORTED GLOBAL)
-add_dependencies(libbitcoin-system build-libbitcoin-system)
 ##add_dependencies(bitcoin-system build-libbitcoin-system)
 #set_target_properties(libbitcoin-system PROPERTIES IMPORTED_LOCATION test-libbitcoin-system INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_PREFIX}/include)

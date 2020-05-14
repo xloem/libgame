@@ -4,12 +4,16 @@
 [submodule "dependencies/libbitcoin-system"]
 	path = dependencies/libbitcoin-system
 	url = https://github.com/libbitcoin/libbitcoin-system
+	branch = version3
 [submodule "dependencies/libbitcoin-protocol"]
 	path = dependencies/libbitcoin-protocol
 	url = https://github.com/libbitcoin/libbitcoin-protocol
+	branch = version3
 [submodule "dependencies/libbitcoin-network"]
 	path = dependencies/libbitcoin-network
 	url = https://github.com/libbitcoin/libbitcoin-network
+	branch = version3
 [submodule "dependencies/libbitcoin-client"]
 	path = dependencies/libbitcoin-client
 	url = https://github.com/libbitcoin/libbitcoin-client
+	branch = version3
