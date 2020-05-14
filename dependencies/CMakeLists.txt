@@ -11,7 +11,6 @@ find_package(Boost 1.62 REQUIRED
 	COMPONENTS chrono date_time filesystem iostreams locale log_setup program_options regex system thread unit_test_framework)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBSECP256K1 REQUIRED libsecp256k1)
-pkg_check_modules(ZEROMQ REQUIRED libzmq)
 find_program(LIBTOOLIZE libtoolize)
 if(NOT LIBTOOLIZE)
 	message(FATAL_ERROR "libtool not found")
@@ -37,6 +36,7 @@ ExternalProject_Add(
 		./configure --prefix=${LIBBITCOIN_PREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
@@ -46,6 +46,26 @@ ExternalProject_Add(
 )
 add_library(libbitcoin-system STATIC IMPORTED GLOBAL)
 add_dependencies(libbitcoin-system build-libbitcoin-system)
+#pkg_check_modules(ZEROMQ REQUIRED libzmq>=4.3.2)
+ExternalProject_Add(
+	build-libzmq
+	DOWNLOAD_COMMAND
+		rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libzmq/. build-libzmq/. &&
+		cd build-libzmq &&
+		./autogen.sh &&
+		./configure --prefix=${LIBBITCOIN_PREFIX} --disable-shared
+		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
+	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libzmq/. .
+	CONFIGURE_COMMAND ""
+	BUILD_IN_SOURCE ON
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
+	INSTALL_COMMAND ""
+	INSTALL_DIR ${LIBBITCOIN_PREFIX}
+)
+add_library(libzmq STATIC IMPORTED GLOBAL)
+add_dependencies(libzmq build-libzmq)
 ExternalProject_Add(
 	build-libbitcoin-protocol
 	DOWNLOAD_COMMAND
@@ -55,6 +75,7 @@ ExternalProject_Add(
 		./configure --prefix=${LIBBITCOIN_PREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
@@ -63,6 +84,7 @@ ExternalProject_Add(
 	INSTALL_DIR ${LIBBITCOIN_PREFIX}
 )
 add_dependencies(build-libbitcoin-protocol build-libbitcoin-system)
+add_dependencies(build-libbitcoin-protocol build-libzmq)
 add_library(libbitcoin-protocol STATIC IMPORTED GLOBAL)
 add_dependencies(libbitcoin-protocol build-libbitcoin-protocol)
 ExternalProject_Add(
@@ -74,6 +96,7 @@ ExternalProject_Add(
 		./configure --prefix=${LIBBITCOIN_PREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
@@ -93,6 +116,7 @@ ExternalProject_Add(
 		./configure --prefix=${LIBBITCOIN_PREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON

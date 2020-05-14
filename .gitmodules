@@ -17,3 +17,6 @@
 	path = dependencies/libbitcoin-client
 	url = https://github.com/libbitcoin/libbitcoin-client
 	branch = version3
+[submodule "dependencies/libzmq"]
+	path = dependencies/libzmq
+	url = https://github.com/zeromq/libzmq.git
