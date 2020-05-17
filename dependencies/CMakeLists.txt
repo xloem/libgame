@@ -127,6 +127,26 @@ ExternalProject_Add(
 add_dependencies(build-libbitcoin-client build-libbitcoin-protocol)
 add_library(libbitcoin-client STATIC IMPORTED GLOBAL)
 add_dependencies(libbitcoin-client build-libbitcoin-client)
+ExternalProject_Add(
+	build-libbitcoin-explorer
+	DOWNLOAD_COMMAND
+		rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/. build-libbitcoin-explorer/. &&
+		cd build-libbitcoin-explorer &&
+		./autogen.sh &&
+		./configure --prefix=${LIBBITCOIN_PREFIX} --disable-shared
+		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
+	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/. .
+	CONFIGURE_COMMAND ""
+	BUILD_IN_SOURCE ON
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
+	INSTALL_COMMAND ""
+	INSTALL_DIR ${LIBBITCOIN_PREFIX}
+)
+add_dependencies(build-libbitcoin-explorer build-libbitcoin-client build-libbitcoin-network)
+add_library(libbitcoin-explorer STATIC IMPORTED GLOBAL)
+add_dependencies(libbitcoin-explorer build-libbitcoin-explorer)
 #file(MAKE_DIRECTORY ${LIBBITCOIN_INCLUDE_DIR})
 #add_custom_command(
 #	OUTPUT test-libbitcoin-system

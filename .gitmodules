@@ -20,3 +20,7 @@
 [submodule "dependencies/libzmq"]
 	path = dependencies/libzmq
 	url = https://github.com/zeromq/libzmq.git
+[submodule "dependencies/libbitcoin-explorer"]
+	path = dependencies/libbitcoin-explorer
+	url = https://github.com/libbitcoin/libbitcoin-explorer.git
+	branch = version3
