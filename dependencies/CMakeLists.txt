@@ -37,7 +37,7 @@ ExternalProject_Add(
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
@@ -57,7 +57,7 @@ ExternalProject_Add(
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libzmq/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
@@ -76,7 +76,7 @@ ExternalProject_Add(
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
@@ -97,7 +97,7 @@ ExternalProject_Add(
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
@@ -117,7 +117,7 @@ ExternalProject_Add(
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
@@ -137,7 +137,7 @@ ExternalProject_Add(
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-		"PKG_CONFIG_PATH=${LIBBITCOIN_PREFIX}/lib/pkgconfig"
+		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
