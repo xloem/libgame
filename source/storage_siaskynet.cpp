@@ -33,7 +33,7 @@ public:
 			}
 			*/
 			size_t count = 0;
-			auto identifier;
+			std::string identifier;
 			for (auto & options : portals) {
 				portal.options = options;
 				if (count >= 2) { break; }
@@ -47,18 +47,22 @@ public:
 				}
 			}
 			if (count < 2) {
-				throw process_error("failed to upload to sia skynet");
+				throw game::process_error("failed to upload to sia skynet");
 			}
 			what["skylink"] = identifier;
 		}
 		auto remote_data = portal.download(what["skylink"]);
 		size_t offset = 0;
-		for (size_t i = 0; i < data.size(); ++ i) {
+		if (remote_data.data != data) {
+			what.erase("skylink");
+			return process_result::INCONSISTENT;
+		}
+		/*for (size_t i = 0; i < data.size(); ++ i) {
 			if (0 != memcmp(data[i].data(), remote_data.data.data() + offset, data[i].size())) {
 				what.erase("skylink");
 				return process_result::INCONSISTENT;
 			}
-		}
+		}*/
 		return process_result::STORED_AND_VERIFIED;
 	}
 private:
