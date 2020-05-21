@@ -72,7 +72,7 @@ add_custom_command(
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libzmq.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libzmq
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
-	COMMAND make install-exec install-docDATA install-pkgconfigDATA
+	COMMAND make install
 )
 add_custom_target(libzmq DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libzmq.a)
 set_target_properties(libzmq PROPERTIES
@@ -98,7 +98,6 @@ add_custom_command(
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
-	COMMAND make check
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-protocol DEPENDS libzmq libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a)
