@@ -8,7 +8,7 @@ add_subdirectory(siaskynetpp)
 
 # libbitcoin
 find_package(Boost 1.62 REQUIRED
-	COMPONENTS chrono date_time filesystem iostreams locale log_setup program_options regex system thread unit_test_framework)
+	COMPONENTS chrono date_time filesystem iostreams locale log log_setup program_options regex system thread unit_test_framework)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBSECP256K1 REQUIRED libsecp256k1)
 find_program(LIBTOOLIZE libtoolize)
@@ -35,14 +35,14 @@ ExternalProject_Add(
 		cd build-libbitcoin-system &&
 		./autogen.sh &&
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
-		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
-	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
-	INSTALL_COMMAND ""
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS}
+	INSTALL_COMMAND make install
 	INSTALL_DIR ${LIBBITCOIN_PREFIX}
 )
 add_library(libbitcoin-system STATIC IMPORTED GLOBAL)
@@ -55,14 +55,14 @@ ExternalProject_Add(
 		cd build-libzmq &&
 		./autogen.sh &&
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
-		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libzmq/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
-	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
-	INSTALL_COMMAND ""
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} check
+	INSTALL_COMMAND make install
 	INSTALL_DIR ${LIBBITCOIN_PREFIX}
 )
 add_library(libzmq STATIC IMPORTED GLOBAL)
@@ -80,8 +80,8 @@ ExternalProject_Add(
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
-	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
-	INSTALL_COMMAND ""
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} check
+	INSTALL_COMMAND make install
 	INSTALL_DIR ${LIBBITCOIN_PREFIX}
 )
 add_dependencies(build-libbitcoin-protocol build-libbitcoin-system)
@@ -95,14 +95,14 @@ ExternalProject_Add(
 		cd build-libbitcoin-network &&
 		./autogen.sh &&
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
-		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
-	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
-	INSTALL_COMMAND ""
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} check
+	INSTALL_COMMAND make install
 	INSTALL_DIR ${LIBBITCOIN_PREFIX}
 )
 add_dependencies(build-libbitcoin-network build-libbitcoin-system)
@@ -115,14 +115,14 @@ ExternalProject_Add(
 		cd build-libbitcoin-client &&
 		./autogen.sh &&
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
-		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
-	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
-	INSTALL_COMMAND ""
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} check
+	INSTALL_COMMAND make install
 	INSTALL_DIR ${LIBBITCOIN_PREFIX}
 )
 add_dependencies(build-libbitcoin-client build-libbitcoin-protocol)
@@ -135,14 +135,14 @@ ExternalProject_Add(
 		cd build-libbitcoin-explorer &&
 		./autogen.sh &&
 		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
-		"CPPFLAGS=${CMAKE_C_FLAGS} -I${LIBBITCOIN_INCLUDE_DIR}"
+		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
 	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/. .
 	CONFIGURE_COMMAND ""
 	BUILD_IN_SOURCE ON
-	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} install
-	INSTALL_COMMAND ""
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} check
+	INSTALL_COMMAND make install
 	INSTALL_DIR ${LIBBITCOIN_PREFIX}
 )
 add_dependencies(build-libbitcoin-explorer build-libbitcoin-client build-libbitcoin-network)
