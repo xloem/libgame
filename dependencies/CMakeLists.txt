@@ -31,20 +31,19 @@ set (LIBBITCOIN_LIBRARIES bitcoin-system CACHE INTERNAL "")
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system)
 add_custom_command(
-	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system/Makefile
-	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system
-	COMMAND autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system
-	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/configure 
-		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
-		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
-		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
-)
-add_custom_command(
-	DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system/Makefile
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/src
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system
+	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/configure ]; then
+		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system
+	$<SEMICOLON> fi
+	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system/Makefile ]; then
+		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/configure 
+			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
+			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
+	$<SEMICOLON> fi
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
@@ -58,20 +57,19 @@ set_target_properties(bitcoin-system PROPERTIES
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libzmq)
 add_custom_command(
-	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/libzmq/Makefile
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libzmq/src
+	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libzmq.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libzmq
-	COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR}/libzmq && ./autogen.sh
-	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/libzmq/configure 
+	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libzmq/configure ]; then
+		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libzmq
+	$<SEMICOLON> fi
+	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libzmq/Makefile ]; then 
+		${CMAKE_CURRENT_SOURCE_DIR}/libzmq/configure 
 		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
-)
-add_custom_command(
-	DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libzmq/Makefile
-	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libzmq/src
-	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libzmq.a
-	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libzmq
+	$<SEMICOLON> fi
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install
 )
@@ -85,20 +83,19 @@ set_target_properties(zmq PROPERTIES
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol)
 add_custom_command(
-	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol/Makefile
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/src
+	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol
-	COMMAND autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol
-	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/configure 
+	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/configure ]; then
+		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol
+	$<SEMICOLON> fi
+	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol/Makefile ]; then 
+		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/configure 
 		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
-)
-add_custom_command(
-	DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol/Makefile
-	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/src
-	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a
-	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol
+	$<SEMICOLON> fi
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
@@ -112,20 +109,19 @@ set_target_properties(bitcoin-protocol PROPERTIES
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network)
 add_custom_command(
-	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network/Makefile
-	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network
-	COMMAND autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network
-	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/configure 
-		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
-		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
-		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
-)
-add_custom_command(
-	DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network/Makefile
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/src
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network
+	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/configure ]; then
+		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network
+	$<SEMICOLON> fi
+	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network/Makefile ]; then 
+		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/configure 
+			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
+			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
+	$<SEMICOLON> fi
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
@@ -139,20 +135,19 @@ set_target_properties(bitcoin-network PROPERTIES
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client)
 add_custom_command(
-	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client/Makefile
-	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client
-	COMMAND autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client
-	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/configure 
-		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
-		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
-		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
-)
-add_custom_command(
-	DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client/Makefile
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/src
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client
+	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/configure ]; then
+		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client
+	$<SEMICOLON> fi
+	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client/Makefile ]; then 
+		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/configure 
+			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
+			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
+	$<SEMICOLON> fi
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
@@ -166,20 +161,19 @@ set_target_properties(bitcoin-client PROPERTIES
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer)
 add_custom_command(
-	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer/Makefile
-	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer
-	COMMAND autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer
-	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure 
-		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
-		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
-		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
-)
-add_custom_command(
-	DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer/Makefile
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/src
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer
+	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure ]; then
+		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer
+	$<SEMICOLON> fi
+	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer/Makefile ]; then 
+		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure 
+			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
+			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
+	$<SEMICOLON> fi
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
