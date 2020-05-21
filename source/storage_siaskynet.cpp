@@ -26,18 +26,12 @@ public:
 			if (!data.size() || !keep_stored) {
 				return process_result::UNPROCESSABLE;
 			}
-			/*
-			std::vector<skynet::upload_data> upload_data;
-			for (size_t i = 0; i < data.size; ++ i) {
-				upload_data.emplace_back(std::to_string(i), data[i]);
-			}
-			*/
 			size_t count = 0;
 			std::string identifier;
 			for (auto & options : portals) {
 				portal.options = options;
 				if (count >= 2) { break; }
-				auto new_identifier = portal.upload(what.begin()->second, data);//upload_data);
+				auto new_identifier = portal.upload(what.begin()->second, data);
 				if (!identifier.size()) { identifier = new_identifier; }
 				if (new_identifier != identifier) {
 					identifier = new_identifier;
@@ -52,17 +46,14 @@ public:
 			what["skylink"] = identifier;
 		}
 		auto remote_data = portal.download(what["skylink"]);
-		size_t offset = 0;
+		if (!data.size()) {
+			data = remote_data.data;
+			return process_result::STORED_AND_VERIFIED;
+		}
 		if (remote_data.data != data) {
 			what.erase("skylink");
 			return process_result::INCONSISTENT;
 		}
-		/*for (size_t i = 0; i < data.size(); ++ i) {
-			if (0 != memcmp(data[i].data(), remote_data.data.data() + offset, data[i].size())) {
-				what.erase("skylink");
-				return process_result::INCONSISTENT;
-			}
-		}*/
 		return process_result::STORED_AND_VERIFIED;
 	}
 private:

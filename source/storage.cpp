@@ -38,7 +38,9 @@ void game::storage_process(std::vector<uint8_t> & data, identifiers & what, bool
 	process_result result;
 	for (auto & backend : storage_all) {
 		result = backend->process(data, what, keep_stored);
-		if (result != process_result::UNPROCESSABLE) { break; }
+		if (result != process_result::UNPROCESSABLE && data.size()) {
+			break;
+		}
 	}
 	if (result == process_result::UNPROCESSABLE) { throw process_error("data not processed"); }
 	process_result_propagate(result, keep_stored, result);

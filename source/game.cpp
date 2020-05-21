@@ -15,7 +15,6 @@ int main()
 	game::identifiers identifiers;
 
 	storage_process(test_data, identifiers);
-	storage_process(test_data, identifiers);
 
 	std::cout << test_string << std::endl;
 	for (auto identifier : identifiers) {
