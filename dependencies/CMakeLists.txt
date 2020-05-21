@@ -49,10 +49,11 @@ add_custom_command(
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-system DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.a)
-set_target_properties(libbitcoin-system PROPERTIES
+add_library(bitcoin-system STATIC IMPORTED GLOBAL)
+add_dependencies(bitcoin-system libbitcoin-system)
+set_target_properties(bitcoin-system PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.a
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
-	INTERFACE_LINK_DIRECTORIES ${LIBBITCOIN_LIBRARY_DIR}
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libzmq)
@@ -75,10 +76,11 @@ add_custom_command(
 	COMMAND make install
 )
 add_custom_target(libzmq DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libzmq.a)
-set_target_properties(libzmq PROPERTIES
+add_library(zmq STATIC IMPORTED GLOBAL)
+add_dependencies(zmq libzmq)
+set_target_properties(zmq PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libzmq.a
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
-	INTERFACE_LINK_DIRECTORIES ${LIBBITCOIN_LIBRARY_DIR}
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol)
@@ -101,10 +103,11 @@ add_custom_command(
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-protocol DEPENDS libzmq libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a)
-set_target_properties(libbitcoin-protocol PROPERTIES
+add_library(bitcoin-protocol STATIC IMPORTED GLOBAL)
+add_dependencies(bitcoin-protocol libbitcoin-protocol)
+set_target_properties(bitcoin-protocol PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
-	INTERFACE_LINK_DIRECTORIES ${LIBBITCOIN_LIBRARY_DIR}
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network)
@@ -127,10 +130,11 @@ add_custom_command(
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-network DEPENDS libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.a)
-set_target_properties(libbitcoin-network PROPERTIES
+add_library(bitcoin-network STATIC IMPORTED GLOBAL)
+add_dependencies(bitcoin-network libbitcoin-network)
+set_target_properties(bitcoin-network PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.a
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
-	INTERFACE_LINK_DIRECTORIES ${LIBBITCOIN_LIBRARY_DIR}
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client)
@@ -153,43 +157,36 @@ add_custom_command(
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-client DEPENDS libbitcoin-protocol ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.a)
-set_target_properties(libbitcoin-client PROPERTIES
+add_library(bitcoin-client STATIC IMPORTED GLOBAL)
+add_dependencies(bitcoin-client libbitcoin-client)
+set_target_properties(bitcoin-client PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.a
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
-	INTERFACE_LINK_DIRECTORIES ${LIBBITCOIN_LIBRARY_DIR}
 )
 
-include(ExternalProject)
-ExternalProject_Add(
-	build-libbitcoin-explorer
-	DOWNLOAD_COMMAND
-		rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/. build-libbitcoin-explorer/. &&
-		cd build-libbitcoin-explorer &&
-		./autogen.sh &&
-		./configure --prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer)
+add_custom_command(
+	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer/Makefile
+	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer
+	COMMAND autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure 
+		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
-	UPDATE_COMMAND rsync -Pva ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/. .
-	CONFIGURE_COMMAND ""
-	BUILD_IN_SOURCE ON
-	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS} check
-	INSTALL_COMMAND make install
-	INSTALL_DIR ${LIBBITCOIN_PREFIX}
 )
-add_dependencies(build-libbitcoin-explorer libbitcoin-client libbitcoin-network)
-add_library(libbitcoin-explorer STATIC IMPORTED GLOBAL)
-add_dependencies(libbitcoin-explorer build-libbitcoin-explorer)
-#file(MAKE_DIRECTORY ${LIBBITCOIN_INCLUDE_DIR})
-#add_custom_command(
-#	OUTPUT test-libbitcoin-system
-#	COMMAND ./autogen.sh
-#	COMMAND ./configure --prefix=${LIBBITCOIN_PREFIX}
-#	COMMAND make
-#	COMMAND make install
-#	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system
-#)
-#add_custom_target(build-libbitcoin-system DEPENDS test-libbitcoin-system)
-##add_custom_target(build-libbitcoin-system DEPENDS test-libbitcoin-system)
-##add_dependencies(bitcoin-system build-libbitcoin-system)
-#set_target_properties(libbitcoin-system PROPERTIES IMPORTED_LOCATION test-libbitcoin-system INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_PREFIX}/include)
+add_custom_command(
+	DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer/Makefile
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/src
+	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.a
+	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer
+	COMMAND make ${EXTERNAL_MAKE_FLAGS}
+	COMMAND make install-exec install-docDATA install-pkgconfigDATA
+)
+add_custom_target(libbitcoin-explorer DEPENDS libbitcoin-client libbitcoin-network ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.a)
+add_library(bitcoin-explorer STATIC IMPORTED GLOBAL)
+add_dependencies(bitcoin-explorer libbitcoin-explorer)
+set_target_properties(bitcoin-explorer PROPERTIES
+	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.a
+	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
+)
