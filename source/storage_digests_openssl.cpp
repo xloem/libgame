@@ -57,7 +57,7 @@ public:
 		return process_result::VERIFIED;
 	}
 
-	virtual process_result process(std::vector<uint8_t> & data, game::identifiers & what) override
+	virtual process_result process(std::vector<uint8_t> & data, game::identifiers & what, bool keep_stored) override
 	{
 		std::vector<std::pair<std::string, decltype(EVP_blake2b512())>> digests = {
 #ifndef OPENSSL_NO_BLAKE2
