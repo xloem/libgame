@@ -46,7 +46,7 @@ add_custom_command(
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
-	COMMAND make install
+	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-system DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.a)
 set_target_properties(libbitcoin-system PROPERTIES
@@ -72,7 +72,7 @@ add_custom_command(
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libzmq.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libzmq
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
-	COMMAND make install
+	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libzmq DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libzmq.a)
 set_target_properties(libzmq PROPERTIES
@@ -99,9 +99,9 @@ add_custom_command(
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make check
-	COMMAND make install
+	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
-add_custom_target(libbitcoin-protocol DEPENDS libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a)
+add_custom_target(libbitcoin-protocol DEPENDS libzmq libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a)
 set_target_properties(libbitcoin-protocol PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
@@ -125,7 +125,7 @@ add_custom_command(
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
-	COMMAND make install
+	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-network DEPENDS libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.a)
 set_target_properties(libbitcoin-network PROPERTIES
@@ -151,7 +151,7 @@ add_custom_command(
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.a
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
-	COMMAND make install
+	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-client DEPENDS libbitcoin-protocol ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.a)
 set_target_properties(libbitcoin-client PROPERTIES
