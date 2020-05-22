@@ -145,7 +145,7 @@ add_custom_command(
 		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client
 	$<SEMICOLON> fi
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client/Makefile ]; then 
-		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/configure 
+		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/configure
 			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
 			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
