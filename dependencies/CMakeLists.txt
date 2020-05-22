@@ -39,7 +39,7 @@ add_custom_command(
 	$<SEMICOLON> fi
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system/Makefile ]; then
 		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/configure 
-			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
 			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
@@ -48,7 +48,7 @@ add_custom_command(
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-system DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.a)
-add_library(bitcoin-system STATIC IMPORTED GLOBAL)
+add_library(bitcoin-system SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-system libbitcoin-system)
 set_target_properties(bitcoin-system PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.a
@@ -65,7 +65,7 @@ add_custom_command(
 	$<SEMICOLON> fi
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libzmq/Makefile ]; then 
 		${CMAKE_CURRENT_SOURCE_DIR}/libzmq/configure 
-		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
@@ -74,7 +74,7 @@ add_custom_command(
 	COMMAND make install
 )
 add_custom_target(libzmq DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libzmq.a)
-add_library(zmq STATIC IMPORTED GLOBAL)
+add_library(zmq SHARED IMPORTED GLOBAL)
 add_dependencies(zmq libzmq)
 set_target_properties(zmq PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libzmq.a
@@ -91,7 +91,7 @@ add_custom_command(
 	$<SEMICOLON> fi
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol/Makefile ]; then 
 		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/configure 
-		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
 		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
@@ -100,7 +100,7 @@ add_custom_command(
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-protocol DEPENDS libzmq libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a)
-add_library(bitcoin-protocol STATIC IMPORTED GLOBAL)
+add_library(bitcoin-protocol SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-protocol libbitcoin-protocol)
 set_target_properties(bitcoin-protocol PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a
@@ -117,7 +117,7 @@ add_custom_command(
 	$<SEMICOLON> fi
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network/Makefile ]; then 
 		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/configure 
-			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
 			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
@@ -126,7 +126,7 @@ add_custom_command(
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-network DEPENDS libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.a)
-add_library(bitcoin-network STATIC IMPORTED GLOBAL)
+add_library(bitcoin-network SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-network libbitcoin-network)
 set_target_properties(bitcoin-network PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.a
@@ -143,7 +143,7 @@ add_custom_command(
 	$<SEMICOLON> fi
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client/Makefile ]; then 
 		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/configure 
-			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
 			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
@@ -152,7 +152,7 @@ add_custom_command(
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-client DEPENDS libbitcoin-protocol ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.a)
-add_library(bitcoin-client STATIC IMPORTED GLOBAL)
+add_library(bitcoin-client SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-client libbitcoin-client)
 set_target_properties(bitcoin-client PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.a
@@ -169,7 +169,7 @@ add_custom_command(
 	$<SEMICOLON> fi
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer/Makefile ]; then 
 		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure 
-			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} --disable-shared
+			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
 			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
@@ -178,7 +178,7 @@ add_custom_command(
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
 add_custom_target(libbitcoin-explorer DEPENDS libbitcoin-client libbitcoin-network ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.a)
-add_library(bitcoin-explorer STATIC IMPORTED GLOBAL)
+add_library(bitcoin-explorer SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-explorer libbitcoin-explorer)
 set_target_properties(bitcoin-explorer PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.a
