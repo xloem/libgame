@@ -6,6 +6,9 @@ execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
 # siaskynetpp
 add_subdirectory(siaskynetpp)
 
+# at the moment, nlohmann::json is inside siaskynetpp already
+set (JSON_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/siaskynetpp/dependencies/json/include PARENT_SCOPE)
+
 # libbitcoin
 find_package(Boost 1.62 REQUIRED
 	COMPONENTS chrono date_time filesystem iostreams locale log log_setup program_options regex system thread unit_test_framework)
