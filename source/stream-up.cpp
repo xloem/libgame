@@ -28,6 +28,7 @@ int main(int argc, char **argv)
 		data.resize(size);
 		stream.write(data, "bytes", offset);
 		offset += data.size();
+		data.resize(data.capacity());
 	}
 	std::cout << stream.identifiers().dump(2) << std::endl;
 	return 0;
