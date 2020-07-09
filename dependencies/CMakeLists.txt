@@ -35,7 +35,7 @@ set (LIBBITCOIN_LIBRARIES bitcoin-system CACHE INTERNAL "")
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system)
 add_custom_command(
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/src
-	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.a
+	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.so.0.0.0
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system
 	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/configure ]; then
 		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system
@@ -50,11 +50,11 @@ add_custom_command(
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
-add_custom_target(libbitcoin-system DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.a)
+add_custom_target(libbitcoin-system DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.so.0.0.0)
 add_library(bitcoin-system SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-system libbitcoin-system)
 set_target_properties(bitcoin-system PROPERTIES
-	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.a
+	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.so.0.0.0
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
 )
 
@@ -87,7 +87,7 @@ set_target_properties(zmq PROPERTIES
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol)
 add_custom_command(
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/src
-	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a
+	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.so.0.0.0
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol
 	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/configure ]; then
 		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol
@@ -102,18 +102,18 @@ add_custom_command(
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
-add_custom_target(libbitcoin-protocol DEPENDS libzmq libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a)
+add_custom_target(libbitcoin-protocol DEPENDS libzmq libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.so.0.0.0)
 add_library(bitcoin-protocol SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-protocol libbitcoin-protocol)
 set_target_properties(bitcoin-protocol PROPERTIES
-	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.a
+	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-protocol.so.0.0.0
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network)
 add_custom_command(
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/src
-	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.a
+	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.so.0.0.0
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network
 	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/configure ]; then
 		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network
@@ -128,18 +128,18 @@ add_custom_command(
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
-add_custom_target(libbitcoin-network DEPENDS libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.a)
+add_custom_target(libbitcoin-network DEPENDS libbitcoin-system ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.so.0.0.0)
 add_library(bitcoin-network SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-network libbitcoin-network)
 set_target_properties(bitcoin-network PROPERTIES
-	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.a
+	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-network.so.0.0.0
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client)
 add_custom_command(
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/src
-	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.a
+	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.so.0.0.0
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client
 	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/configure ]; then
 		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client
@@ -154,18 +154,18 @@ add_custom_command(
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
-add_custom_target(libbitcoin-client DEPENDS libbitcoin-protocol ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.a)
+add_custom_target(libbitcoin-client DEPENDS libbitcoin-protocol ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.so.0.0.0)
 add_library(bitcoin-client SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-client libbitcoin-client)
 set_target_properties(bitcoin-client PROPERTIES
-	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.a
+	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-client.so.0.0.0
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer)
 add_custom_command(
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/src
-	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.a
+	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.so.0.0.0
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer
 	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure ]; then
 		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer
@@ -180,10 +180,10 @@ add_custom_command(
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
-add_custom_target(libbitcoin-explorer DEPENDS libbitcoin-client libbitcoin-network ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.a)
+add_custom_target(libbitcoin-explorer DEPENDS libbitcoin-client libbitcoin-network ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.so.0.0.0)
 add_library(bitcoin-explorer SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-explorer libbitcoin-explorer)
 set_target_properties(bitcoin-explorer PROPERTIES
-	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.a
+	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.so.0.0.0
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
 )

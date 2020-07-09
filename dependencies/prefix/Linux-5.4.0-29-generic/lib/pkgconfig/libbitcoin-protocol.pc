@@ -1,0 +1,37 @@
+###############################################################################
+#  Copyright (c) 2014-2015 libbitcoin-protocol developers (see COPYING).
+#
+#         GENERATED SOURCE CODE, DO NOT EDIT EXCEPT EXPERIMENTALLY
+#
+###############################################################################
+
+# Substitutions
+#==============================================================================
+prefix=/home/karl/src/care/projects/libgame/dependencies/prefix
+exec_prefix=/home/karl/src/care/projects/libgame/dependencies/prefix/Linux-5.4.0-29-generic
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+
+# Metadata
+#==============================================================================
+Name: libbitcoin-protocol
+Description: Bitcoin Blockchain Query Protocol
+URL: https://github.com/libbitcoin/libbitcoin-protocol
+Version: 3.6.0
+
+
+# Variables
+#==============================================================================
+# Dependencies that publish package configuration.
+#------------------------------------------------------------------------------
+Requires: libzmq >= 4.3.2 libbitcoin >= 3.6.0
+
+# Include directory and any other required compiler flags.
+#------------------------------------------------------------------------------
+Cflags: -I${includedir}
+
+# Lib directory, lib and any required that do not publish pkg-config.
+#------------------------------------------------------------------------------
+Libs: -L${libdir} -lbitcoin-protocol
+

@@ -1,12 +1,14 @@
 #pragma once
 
 #include <chrono>
+#include <thread>
+
 // iostreams for debug
 #include <iostream>
 
 #include <nlohmann/json.hpp>
 
-#include <siaskynet.hpp>
+#include <siaskynet_multiportal.hpp>
 
 #include "crypto.hpp"
 
@@ -263,16 +265,30 @@ public:
 
 		auto metadata_identifiers = cryptography.digests({&metadata_upload.data});
 
+		std::mutex skylink_mutex;
 		std::string skylink;
-		while (true) {
-			try {
-				skylink = portal.upload(metadata_identifiers["sha3_512"], {metadata_upload, content});
-				break;
-			} catch(std::runtime_error const & e) {
-				std::cerr << e.what() << std::endl;
-				continue;
+		auto ensure_upload = [&]() {
+			sia::skynet portal;
+			while (true) {
+				auto transfer = multiportal.begin_transfer(sia::skynet_multiportal::upload);
+				portal.options = transfer.portal;
+				try {
+					std::string link = portal.upload(metadata_identifiers["sha3_512"], {metadata_upload, content});
+					multiportal.end_transfer(transfer, metadata_upload.data.size() + content.data.size());
+					std::lock_guard<std::mutex> lock(skylink_mutex);
+					skylink = link;
+					break;
+				} catch(std::runtime_error const & e) {
+					std::cerr << portal.options.url << ": " << e.what() << std::endl;
+					multiportal.end_transfer(transfer, 0);
+					continue;
+				}
 			}
-		}
+		};
+		auto upload1 = std::thread(ensure_upload);
+		auto upload2 = std::thread(ensure_upload);
+		upload1.join();
+		upload2.join();
 		metadata_identifiers["skylink"] = skylink + "/" + metadata_upload.filename;
 
 		// if we want to supporto threading we'll likely need a lock around this whole function (not just the change to tail)
@@ -400,11 +416,15 @@ private:
 		auto skylink = identifiers["skylink"];
 		std::vector<uint8_t> result;
 		while (true) {
+			auto transfer = multiportal.begin_transfer(sia::skynet_multiportal::download);
+			download_portal.options = transfer.portal;
 			try {
-				result = portal.download(skylink).data;
+				result = download_portal.download(skylink).data;
+				multiportal.end_transfer(transfer, result.size());
 				break;
 			} catch(std::runtime_error const & e) {
-				std::cerr << e.what() << std::endl;
+				std::cerr << download_portal.options.url << ": " << e.what() << std::endl;
+				multiportal.end_transfer(transfer, 0);
 				continue;
 			}
 		}
@@ -421,10 +441,11 @@ private:
 
 	//nlohmann::json lookup_nodes(node & source, nlohmann::json & bounds)
 	//{
-		// to do this right, consider that source's content may be in the middle of its lookups.  so you want to put it in the right spot.
+	//	// to do this right, consider that source's content may be in the middle of its lookups.  so you want to put it in the right spot.
 	//}
 
-	sia::skynet portal;
+	sia::skynet download_portal;
+	sia::skynet_multiportal multiportal;
 	crypto cryptography;
 	node tail;
 	std::unordered_map<std::string, node> cache;
