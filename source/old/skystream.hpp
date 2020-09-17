@@ -2,13 +2,14 @@
 
 #include <chrono>
 #include <thread>
+#include <unordered_map>
 
 // iostreams for debug
-#include <iostream>
+//#include <iostream>
 
 #include <nlohmann/json.hpp>
 
-#include <siaskynet_multiportal.hpp>
+#include "portalpool.hpp"
 
 #include "crypto.hpp"
 
@@ -22,50 +23,70 @@ seconds_t time()
 class skystream
 {
 public:
-	skystream()
-	{
-		auto now = time();
-		tail.metadata = {
-			{"content", {
-				{"spans",{
-					//{"real", {
-						{"time", {{"start", time()}, {"end", time()}}},
-						{"index", {{"start", 0}, {"end", 0}}},
-						{"bytes", {{"start", 0}, {"end", 0}}}
-					//}}
-				}}
-			}}//,
-			//{"flows", {}}
-		};
-	}
-	skystream(std::string way, std::string link)
+	skystream(sia::portalpool & portalpool, std::string way, std::string link)
+	: portalpool(portalpool)
 	{
 		std::vector<uint8_t> data;
 		tail.metadata = get_json({{way,link}});
 		tail.identifiers = cryptography.digests({&data});
 		tail.identifiers[way] = link;
 	}
-	skystream(nlohmann::json identifiers)
-	: tail{identifiers, get_json(identifiers)}
-	{ }
-
-	std::vector<uint8_t> read(std::string span, double offset, std::string flow = "real")
+	skystream(sia::portalpool & portalpool, nlohmann::json identifiers = {})
+	: portalpool(portalpool)
 	{
-		auto metadata = this->get_node(tail, span, offset).metadata;
+		tail.identifiers = identifiers;
+		if (!identifiers.empty()) {
+			tail.metadata = get_json(identifiers);
+		} else {
+			auto now = time();
+			tail.metadata = {
+				{"content", {
+					{"spans",{
+						//{"real", {
+							{"time", {{"start", now}, {"end", now}}},
+							{"index", {{"start", 0}, {"end", 0}}},
+							{"bytes", {{"start", 0}, {"end", 0}}}
+						//}}
+					}}
+				}}//,
+				//{"flows", {}}
+			};
+		}
+	}
+
+	skystream(skystream const &) = default;
+	skystream(skystream &&) = default;
+
+	std::vector<uint8_t> read(std::string span, double & offset, std::string flow = "real", sia::portalpool::worker const * worker = 0)
+	{
+		auto metadata = this->get_node(tail, span, offset, {}, worker).metadata;
+		std::lock_guard<std::mutex> lock(methodmtx);
 		auto metadata_content = metadata["content"];
 		double content_start = metadata_content["spans"][span]["start"];
 		if (span != "bytes" && offset != content_start) {
 			throw std::runtime_error(span + " " + std::to_string(offset) + " is within block span");
 		}
-		auto data = get(metadata_content["identifiers"]);
-
+		auto data = get(metadata_content["identifiers"], worker);
+	
 		auto begin = data.begin() + offset - content_start;
-		auto end = data.begin() + metadata_content["bounds"]["bytes"]["end"] - content_start;
+		// the goal here was, if the span is bytes, to use it as the offset in
+		// otherwise, to just return the whole chunk
+		auto end = begin;
+		if (span == "bytes") {
+			end += (uint64_t)metadata_content["bounds"]["bytes"]["end"] - content_start;
+		} else {
+			end = data.end();
+		}
+		offset = metadata_content["bounds"][span]["end"];
 		return {begin, end};
 	}
 
-	void write(std::vector<uint8_t> & data, std::string span, double offset)
+	std::mutex writemtx;
+	void write(std::vector<uint8_t> & data, std::string span, double offset, sia::portalpool::worker const * worker = 0)
 	{
+		std::lock_guard<std::mutex> writelock(writemtx);
+
+		std::unique_lock<std::mutex> lock(methodmtx);
 		seconds_t end_time = time();
 		seconds_t start_time = tail.metadata["content"]["spans"]["time"]["end"];
 		
@@ -80,7 +101,7 @@ public:
 			//full_size = data.size();
 		} else {
 			nlohmann::json head_node_bounds;
-			head_node = this->get_node(this->tail, span, offset);
+			head_node = this->get_node(this->tail, span, offset, {}, worker);
 			auto head_node_content = head_node.metadata["content"];
 			double start_head = head_node_content["bounds"][span]["start"];
 			start_bytes = head_node_content["bounds"]["bytes"]["start"]; 
@@ -109,7 +130,7 @@ public:
 		node * tail_node;
 		nlohmann::json tail_bounds;
 		try {
-			tail_node = &get_node(tail, "bytes", end_bytes);
+			tail_node = &get_node(tail, "bytes", end_bytes, {}, worker);
 			auto tail_node_content = tail_node->metadata["content"];
 			if (end_bytes != tail_node_content["bounds"]["bytes"]["start"]) {
 				for (auto bound : tail_node_content["bounds"].items()) {
@@ -125,12 +146,12 @@ public:
 		}
 
 		nlohmann::json lookup_nodes = nlohmann::json::array();
-		size_t depth = 0;
+		//size_t depth = 0;
 		nlohmann::json new_lookup_node;
 		node preceding;
 		lookup_nodes.clear();
 		if (start_bytes > 0) { try {
-			preceding = this->get_node(tail, "bytes", start_bytes - 1); // preceding 
+			preceding = this->get_node(tail, "bytes", start_bytes - 1, {}, worker); // preceding 
 			new_lookup_node = preceding.metadata["content"];
 			new_lookup_node["identifiers"] = preceding.identifiers;
 			new_lookup_node["depth"] = 0;
@@ -255,7 +276,7 @@ public:
 			{"lookup", lookup_nodes}
 		};
 		std::string metadata_string = metadata_json.dump();
-		std::cerr << metadata_string << std::endl;
+		//std::cerr << metadata_string << std::endl;
 
 		sia::skynet::upload_data metadata_upload("metadata.json", std::vector<uint8_t>{metadata_string.begin(), metadata_string.end()}, "application/json");
 		sia::skynet::upload_data content("content", data, "application/octet-stream");
@@ -265,42 +286,36 @@ public:
 
 		auto metadata_identifiers = cryptography.digests({&metadata_upload.data});
 
+		lock.unlock();
+
 		std::mutex skylink_mutex;
 		std::string skylink;
 		auto ensure_upload = [&]() {
-			sia::skynet portal;
-			while (true) {
-				auto transfer = multiportal.begin_transfer(sia::skynet_multiportal::upload);
-				portal.options = transfer.portal;
-				try {
-					std::string link = portal.upload(metadata_identifiers["sha3_512"], {metadata_upload, content});
-					multiportal.end_transfer(transfer, metadata_upload.data.size() + content.data.size());
-					std::lock_guard<std::mutex> lock(skylink_mutex);
-					skylink = link;
-					break;
-				} catch(std::runtime_error const & e) {
-					std::cerr << portal.options.url << ": " << e.what() << std::endl;
-					multiportal.end_transfer(transfer, 0);
-					continue;
-				}
-			}
+			std::string link = portalpool.upload(metadata_identifiers["sha3_512"], {metadata_upload, content}, false, worker);
+			{
+				std::lock_guard<std::mutex> lock(skylink_mutex);
+				skylink = link;
+			} 
 		};
 		auto upload1 = std::thread(ensure_upload);
 		auto upload2 = std::thread(ensure_upload);
 		upload1.join();
 		upload2.join();
+		lock.lock();
 		metadata_identifiers["skylink"] = skylink + "/" + metadata_upload.filename;
 
-		// if we want to supporto threading we'll likely need a lock around this whole function (not just the change to tail)
+		// if we want to support threading we'll likely need a lock around this whole function (not just the change to tail)
+		// 	later: i've done that, but haven't integrated with old stuff to simplify
 		tail.identifiers = metadata_identifiers;
 		tail.metadata = metadata_json;
 	}
 
-	std::map<std::string,std::pair<double,double>> block_spans(std::string span, double offset)
+	std::map<std::string,std::pair<double,double>> block_spans(std::string span, double offset, sia::portalpool::worker const * worker = 0)
 	{
-		auto metadata = this->get_node(tail, span, offset).metadata;
+		std::lock_guard<std::mutex> lock(methodmtx);
+		auto metadata = this->get_node(tail, span, offset, {}, worker).metadata;
 		std::map<std::string,std::pair<double,double>> result;
-		for (auto & content_span : metadata["content"]["bounds"].items()) {
+		for (auto & content_span : metadata["content"]["spans"].items()) {
 			auto span = content_span.key();
 			result[span].second = content_span.value()["end"];
 			result[span].first = content_span.value()["start"];
@@ -308,13 +323,14 @@ public:
 		return result;
 	}
 
-	std::pair<double,double> block_span(std::string span, double offset)
+	std::pair<double,double> block_span(std::string span, double offset, sia::portalpool::worker const * worker = 0)
 	{
-		return block_spans(span, offset)[span];
+		return block_spans(span, offset, worker)[span];
 	}
 
 	std::map<std::string,std::pair<double,double>> spans()
 	{
+		std::lock_guard<std::mutex> lock(methodmtx);
 		std::map<std::string,std::pair<double,double>> result;
 		for (auto & content_span : tail.metadata["content"]["spans"].items()) {
 			auto span = content_span.key();
@@ -354,8 +370,28 @@ public:
 
 	nlohmann::json identifiers()
 	{
+		std::lock_guard<std::mutex> lock(methodmtx);
 		return tail.identifiers;
 	}
+
+	std::vector<uint8_t> get(nlohmann::json identifiers, sia::portalpool::worker const * worker = 0)
+	{
+		auto skylink = identifiers["skylink"];
+		std::vector<uint8_t> result = portalpool.download(skylink, {}, 1024*1024*64, false, worker).data;
+		auto digests = cryptography.digests({&result});
+		for (auto & digest : digests.items()) {
+			if (identifiers.contains(digest.key())) {
+				if (digest.value() != identifiers[digest.key()]) {
+					throw std::runtime_error(digest.key() + " digest mismatch.  identifiers=" + identifiers.dump() + " digests=" + digests.dump());
+				}
+			}
+		}
+		return result;
+	}
+
+protected:
+	std::mutex methodmtx;
+	sia::portalpool & portalpool;
 
 private:
 	struct node
@@ -364,7 +400,7 @@ private:
 		nlohmann::json metadata;
 	};
 
-	node & get_node(node & start, std::string span, double offset, nlohmann::json bounds = {})
+	node & get_node(node & start, std::string span, double offset, nlohmann::json bounds = {}, sia::portalpool::worker const * worker = 0)
 	{
 		auto content_spans = start.metadata["content"]["spans"];
 		auto content_span = content_spans[span];
@@ -391,7 +427,7 @@ private:
 				auto identifiers = lookup["identifiers"];
 				std::string identifier = identifiers.begin().value();
 				if (!cache.count(identifier)) {
-					cache[identifier] = node{identifiers, get_json(identifiers)};
+					cache[identifier] = node{identifiers, get_json(identifiers, nullptr, worker)};
 				}
 				return get_node(cache[identifier], span, offset, lookup_spans);
 			}
@@ -399,9 +435,9 @@ private:
 		throw std::out_of_range(span + " " + std::to_string(offset) + " out of range");
 	}
 
-	nlohmann::json get_json(nlohmann::json identifiers, std::vector<uint8_t> * data = nullptr)
+	nlohmann::json get_json(nlohmann::json identifiers, std::vector<uint8_t> * data = nullptr, sia::portalpool::worker const * worker = 0)
 	{
-		auto data_result = get(identifiers);
+		auto data_result = get(identifiers, worker);
 		if (data) { *data = data_result; }
 		auto result = nlohmann::json::parse(data_result);
 		// TODO improve (refactor?), hardcodes storage system and is slow due to 2 requests for each chunk
@@ -411,41 +447,11 @@ private:
 		return result;
 	}
 
-	std::vector<uint8_t> get(nlohmann::json identifiers)
-	{
-		auto skylink = identifiers["skylink"];
-		std::vector<uint8_t> result;
-		while (true) {
-			auto transfer = multiportal.begin_transfer(sia::skynet_multiportal::download);
-			download_portal.options = transfer.portal;
-			try {
-				result = download_portal.download(skylink).data;
-				multiportal.end_transfer(transfer, result.size());
-				break;
-			} catch(std::runtime_error const & e) {
-				std::cerr << download_portal.options.url << ": " << e.what() << std::endl;
-				multiportal.end_transfer(transfer, 0);
-				continue;
-			}
-		}
-		auto digests = cryptography.digests({&result});
-		for (auto & digest : digests.items()) {
-			if (identifiers.contains(digest.key())) {
-				if (digest.value() != identifiers[digest.key()]) {
-					throw std::runtime_error(digest.key() + " digest mismatch.  identifiers=" + identifiers.dump() + " digests=" + digests.dump());
-				}
-			}
-		}
-		return result;
-	}
-
 	//nlohmann::json lookup_nodes(node & source, nlohmann::json & bounds)
 	//{
 	//	// to do this right, consider that source's content may be in the middle of its lookups.  so you want to put it in the right spot.
 	//}
 
-	sia::skynet download_portal;
-	sia::skynet_multiportal multiportal;
 	crypto cryptography;
 	node tail;
 	std::unordered_map<std::string, node> cache;

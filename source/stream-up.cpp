@@ -9,7 +9,8 @@
 
 int main(int argc, char **argv)
 {
-	skystream stream;
+	sia::portalpool pool;
+	skystream stream(pool);
 
 	unsigned long long offset = 0;
 

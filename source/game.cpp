@@ -4,18 +4,20 @@
 
 #include <iostream>
 
-#include <bitcoin/bitcoin.hpp>
-#include <bitcoin/client.hpp>
+//#include <bitcoin/bitcoin.hpp>
+//#include <bitcoin/client.hpp>
+//using namespace libbitcoin;
 
 using namespace std;
 using namespace game;
 
-using namespace libbitcoin;
 
 int main()
 {
 	string test_string = "Have fun!";
 	vector<uint8_t> test_data(test_string.begin(), test_string.end());
+
+#if 0
 
 	// note: there are ways to upload data to bitcoin more cheaply than op_return.  op_return will be implemented first for simplicity.
 
@@ -92,6 +94,7 @@ int main()
 	for (auto identifier : identifiers) {
 		std::cout << identifier.first << ": " << identifier.second << std::endl;
 	}*/
+#endif
 
 	return 0;
 }

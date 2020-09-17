@@ -17,7 +17,8 @@ int main(int argc, char **argv)
 		std::cerr << "Usage: " << argv[0] << " sia://<skylinkcontents>" << std::endl;
 		return -1;
 	}
-	skystream stream("skylink", argv[1]);
+	sia::portalpool pool;
+	skystream stream(pool, "skylink", argv[1]);
 	std::cerr << "Bytes: " << (unsigned long long)stream.length("bytes") << std::endl;
 	std::cerr << "Time: " << stream.length("time") << std::endl;
 	std::cerr << "Index: " << (unsigned long long)stream.length("index") << std::endl;
