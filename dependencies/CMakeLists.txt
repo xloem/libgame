@@ -14,6 +14,10 @@ find_program(LIBTOOLIZE libtoolize)
 if(NOT LIBTOOLIZE)
 	message(FATAL_ERROR "libtool not found")
 endif()
+find_program(PKGCONFIG pkg-config)
+if(NOT PKGCONFIG)
+	message(FATAL_ERROR "pkg-config not found")
+endif()
 find_package(Boost 1.62 REQUIRED
 	COMPONENTS chrono date_time filesystem iostreams locale log log_setup program_options regex system thread unit_test_framework)
 
