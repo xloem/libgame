@@ -24,3 +24,6 @@
 	path = dependencies/libbitcoin-explorer
 	url = https://github.com/libbitcoin/libbitcoin-explorer.git
 	branch = version3
+[submodule "dependencies/libsecp256k1"]
+	path = dependencies/libsecp256k1
+	url = https://github.com/bitcoin-core/secp256k1.git
