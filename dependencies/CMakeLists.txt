@@ -10,18 +10,12 @@ add_subdirectory(siaskynetpp)
 set (JSON_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/siaskynetpp/dependencies/json/include PARENT_SCOPE)
 
 # libbitcoin
-find_package(Boost 1.62 REQUIRED
-	COMPONENTS chrono date_time filesystem iostreams locale log log_setup program_options regex system thread unit_test_framework)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBSECP256K1 REQUIRED libsecp256k1)
 find_program(LIBTOOLIZE libtoolize)
 if(NOT LIBTOOLIZE)
 	message(FATAL_ERROR "libtool not found")
 endif()
-find_program(PKGCONFIG pkg-config)
-if(NOT PKGCONFIG)
-	message(FATAL_ERROR "pkg-config not found")
-endif()
+find_package(Boost 1.62 REQUIRED
+	COMPONENTS chrono date_time filesystem iostreams locale log log_setup program_options regex system thread unit_test_framework)
 
 set (EXTERNAL_MAKE_FLAGS "-j2" CACHE STRING "flags passed to make for external projects")
 
@@ -32,9 +26,21 @@ set (LIBBITCOIN_LIBRARY_DIR ${LIBBITCOIN_EPREFIX}/lib)
 
 set (LIBBITCOIN_LIBRARIES bitcoin-system CACHE INTERNAL "")
 
+include(ExternalProject)
+ExternalProject_Add(libsecp256k1
+	SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libsecp256k1
+	DOWNLOAD_COMMAND cd <SOURCE_DIR> && ./autogen.sh
+	INSTALL_DIR ${LIBBITCOIN_PREFIX}
+	CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --exec-prefix=${LIBBITCOIN_EPREFIX}
+		--enable-module-recovery
+		--disable-openssl-tests # only the tests use openssl
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS}
+)
+
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system)
 add_custom_command(
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/src
+	DEPENDS libsecp256k1
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.so.0.0.0
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system
 	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/configure ]; then
