@@ -16,6 +16,7 @@ link_libraries (bitcoin-system bitcoin-protocol bitcoin-client ${CMAKE_THREAD_LI
 #link_libraries (${CMAKE_THREAD_LIBS_INIT} ${SIASKYNETPP_LIBRARIES} OpenSSL::Crypto)
 
 add_executable (game source/game.cpp source/storage.cpp source/storage_digests_openssl.cpp source/storage_siaskynet)
+target_compile_options(game PRIVATE -Werror -Wall -Wextra -Wno-error=ignored-qualifiers)
 
 add_executable (old-stream-up source/stream-up.cpp)
 

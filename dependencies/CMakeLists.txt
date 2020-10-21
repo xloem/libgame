@@ -53,6 +53,8 @@ add_custom_command(
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system/Makefile ]; then
 		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/configure 
 			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
+			--without-examples --without-tests
+			--with-icu # needed for key encryption, so add guards if removed
 			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
@@ -66,6 +68,7 @@ add_dependencies(bitcoin-system libbitcoin-system)
 set_target_properties(bitcoin-system PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.so.0.0.0
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
+	INTERFACE_COMPILE_OPTIONS -DWITH_ICU
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libzmq)
@@ -105,6 +108,7 @@ add_custom_command(
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-protocol/Makefile ]; then 
 		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-protocol/configure 
 		--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
+		--without-examples --without-tests
 		"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 		"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 		"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
@@ -131,6 +135,7 @@ add_custom_command(
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-network/Makefile ]; then 
 		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-network/configure 
 			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
+			--without-examples --without-tests
 			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
@@ -157,6 +162,7 @@ add_custom_command(
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-client/Makefile ]; then 
 		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-client/configure
 			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
+			--without-examples --without-tests
 			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
@@ -183,6 +189,7 @@ add_custom_command(
 	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer/Makefile ]; then 
 		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure 
 			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
+			--without-examples --without-tests
 			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
 			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
 			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
