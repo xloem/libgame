@@ -41,11 +41,20 @@ ExternalProject_Add(libsecp256k1
 	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS}
 )
 
+include(ExternalProject)
+ExternalProject_Add(libicu
+	SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/icu/icu4c/source
+	INSTALL_DIR ${LIBBITCOIN_PREFIX}
+	CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --exec-prefix=${LIBBITCOIN_EPREFIX} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS}
+)
+
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system)
 add_custom_command(
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/src
 	DEPENDS libsecp256k1
-	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.so.0.0.0
+	DEPENDS libicu
+	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-system.so.0.0.0
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system
 	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/configure ]; then
 		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system
@@ -62,11 +71,11 @@ add_custom_command(
 	COMMAND make ${EXTERNAL_MAKE_FLAGS}
 	COMMAND make install-exec install-docDATA install-pkgconfigDATA
 )
-add_custom_target(libbitcoin-system DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.so.0.0.0)
+add_custom_target(libbitcoin-system DEPENDS ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-system.so.0.0.0)
 add_library(bitcoin-system SHARED IMPORTED GLOBAL)
 add_dependencies(bitcoin-system libbitcoin-system)
 set_target_properties(bitcoin-system PROPERTIES
-	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.so.0.0.0
+	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-system.so.0.0.0
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
 	INTERFACE_COMPILE_OPTIONS -DWITH_ICU
 )

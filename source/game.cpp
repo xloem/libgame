@@ -4,7 +4,7 @@
 
 #include <iostream>
 
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 #include <bitcoin/client.hpp>
 using namespace libbitcoin;
 
@@ -13,7 +13,7 @@ using namespace game;
 
 class ashesofshreddeddocument
 {
-private:
+/*private:
 	template <typename Dispatch, typename... Args>
 	auto libbitcoinasync(std::string information, Dispatch dispatch, Args... args) {
 	
@@ -37,35 +37,35 @@ private:
 			throw std::system_error(bc_error, information);
 		}
 		return bc_result;
-	};
+	};*/
 
 public:
 	static std::string new_unencrypted_user()
 	{
 		std::vector<uint8_t> seed(64);
 		std::cerr << "Warning: key made with predictable pseudo-random numbers from clock." << std::endl;
-		libbitcoin::pseudo_random::fill(seed);
-		libbitcoin::wallet::ec_private key(seed);
+		libbitcoin::system::pseudo_random::fill(seed);
+		libbitcoin::system::wallet::ec_private key(seed);
 		return key.encoded();
 	}
 
 	static std::string encrypt_user(std::string unencrypted, std::string passphrase)
 	{
-		libbitcoin::wallet::ec_private clearkey(unencrypted);
-		libbitcoin::wallet::encrypted_private crypt;
-		libbitcoin::wallet::encrypt(crypt, clearkey.secret(), passphrase, clearkey.version(), clearkey.compressed());
-		libbitcoin::wallet::ek_private cryptkey(crypt);
+		libbitcoin::system::wallet::ec_private clearkey(unencrypted);
+		libbitcoin::system::wallet::encrypted_private crypt;
+		libbitcoin::system::wallet::encrypt(crypt, clearkey.secret(), passphrase, clearkey.version(), clearkey.compressed());
+		libbitcoin::system::wallet::ek_private cryptkey(crypt);
 		return cryptkey.encoded();
 	}
 
 	static std::string decrypt_user(std::string encrypted, std::string passphrase)
 	{
-		libbitcoin::wallet::ek_private cryptkey(encrypted);
-		libbitcoin::ec_secret clear;
+		libbitcoin::system::wallet::ek_private cryptkey(encrypted);
+		libbitcoin::system::ec_secret clear;
 		uint8_t version;
 		bool compressed;
-		libbitcoin::wallet::decrypt(clear, version, compressed, cryptkey, passphrase);
-		libbitcoin::wallet::ec_private clearkey(clear, version, compressed);
+		libbitcoin::system::wallet::decrypt(clear, version, compressed, cryptkey, passphrase);
+		libbitcoin::system::wallet::ec_private clearkey(clear, version, compressed);
 		return clearkey.encoded();
 	}
 
@@ -77,36 +77,37 @@ public:
 	// 19091 appears to be testnet, even if the hostname says mainnet
 	//ashesofshreddeddocument(std::string user, std::string server = "tcp://mainnet1.libbitcoin.net:19091")
 	ashesofshreddeddocument(std::string user, std::string server = "tcp://mainnet.libbitcoin.net:9091")
-	: client(/*timeout_seconds*/1, /*retries*/3)
+	: client(/*retries*/3)
 	{
 		//#if 0
 		//libbitcoin::ec_secret secret;
 		//libbitcoin::decode_base16(secret, user);
-		privkey = libbitcoin::wallet::ec_private(user);//secret);
+		privkey = libbitcoin::system::wallet::ec_private(user);//secret);
 		if (privkey) {
-			libbitcoin::ec_compressed pub;
-			libbitcoin::secret_to_public(pub, privkey.secret());
+			libbitcoin::system::ec_compressed pub;
+			libbitcoin::system::secret_to_public(pub, privkey.secret());
 			address = privkey;
 		} else {
 			address = user;
 		}
+		paymentkey = libbitcoin::system::sha256_hash(address.output_script().to_data(false));
 
 
-		if (!client.connect(libbitcoin::config::endpoint(server))) {
+		if (!client.connect(libbitcoin::system::config::endpoint(server))) {
 			throw std::runtime_error("failed to connect to " + server);
 		}
 
-		client.set_on_update(std::bind(&ashesofshreddeddocument::on_update, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
-		libbitcoinasync("subscribe address", &Client::subscribe_address, address);
+		//libbitcoinasync("subscribe address", &Client::subscribe_address, address);
+		client.subscribe_key(std::bind(&ashesofshreddeddocument::on_update, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4), paymentkey);
 
 		// get all utxos
-		utxos = libbitcoinasync("fetch unspent outputs", &Client::blockchain_fetch_unspent_outputs, address, /*satoshi needed*/1, libbitcoin::wallet::select_outputs::algorithm::individual).points;
+		utxos = libbitcoinasync<libbitcoin::system::chain::points_value>("fetch unspent outputs", &Client::blockchain_fetch_unspent_outputs, paymentkey, /*satoshi needed*/1, libbitcoin::system::wallet::select_outputs::algorithm::individual).points;
 
 		//std::cout << user << std::endl;
 		//std::cout << privkey << std::endl;
 		std::cout << "Address: " << address << std::endl;
 		for (auto point : utxos) {
-			std::cout << libbitcoin::encode_hash(point.hash()) << ":" << point.index() << " " << point.value() << " " << point.is_null() << std::endl;
+			std::cout << libbitcoin::system::encode_hash(point.hash()) << ":" << point.index() << " " << point.value() << " " << point.is_null() << std::endl;
 		}
 		//#endif
 	}
@@ -116,7 +117,7 @@ public:
 		// categories as utxos might bump into dust limit
 		///*
 		
-		libbitcoin::chain::transaction tx;
+		libbitcoin::system::chain::transaction tx;
 		tx.set_version(1);
 
 		// note: there are ways to upload data to bitcoin more cheaply than op_return (multisig output maybe?).  op_return will be implemented first for simplicity.
@@ -125,37 +126,37 @@ public:
 		double fee_per_sigop = 100;
 
 		
-		libbitcoin::chain::script dataScript(libbitcoin::machine::operation::list({libbitcoin::machine::opcode::return_, data}));
-		tx.outputs().push_back(libbitcoin::chain::output(0, dataScript));
+		libbitcoin::system::chain::script dataScript(libbitcoin::system::machine::operation::list({libbitcoin::system::machine::opcode::return_, data}));
+		tx.outputs().push_back(libbitcoin::system::chain::output(0, dataScript));
 
-		libbitcoin::chain::script changeScript = libbitcoin::chain::script::to_pay_key_hash_pattern(address.hash()); // takes  ashort_hash which is a byte_array<20>
-		libbitcoin::chain::output changeOutput(0, changeScript);
+		libbitcoin::system::chain::script changeScript = libbitcoin::system::chain::script::to_pay_key_hash_pattern(address.hash()); // takes  ashort_hash which is a byte_array<20>
+		libbitcoin::system::chain::output changeOutput(0, changeScript);
 		tx.outputs().push_back(changeOutput);
 
 		for (auto & category : categories) {
-			libbitcoin::chain::script categoryScript = libbitcoin::chain::script::to_pay_key_hash_pattern(category);
-			tx.outputs().push_back(libbitcoin::chain::output(0, categoryScript));
+			libbitcoin::system::chain::script categoryScript = libbitcoin::system::chain::script::to_pay_key_hash_pattern(category);
+			tx.outputs().push_back(libbitcoin::system::chain::output(0, categoryScript));
 		}
 
 		uint64_t funded = 0;
 
-		libbitcoin::chain::script utxo_script = libbitcoin::chain::script::to_pay_key_hash_pattern(address.hash());
-		libbitcoin::chain::point_value utxo = utxos.back(); // utxos could be empty, in which case segfault happens atm
+		libbitcoin::system::chain::script utxo_script = libbitcoin::system::chain::script::to_pay_key_hash_pattern(address.hash());
+		libbitcoin::system::chain::point_value utxo = utxos.back(); // utxos could be empty, in which case segfault happens atm
 		utxos.pop_back();
 		funded += utxo.value();
-		tx.inputs().push_back(libbitcoin::chain::input(utxo, utxo_script, 0xffffffff));
+		tx.inputs().push_back(libbitcoin::system::chain::input(utxo, utxo_script, 0xffffffff));
 
 		uint64_t fee = fee_per_byte * tx.to_data().size() + fee_per_sigop * tx.signature_operations(true, true);
 		tx.outputs()[1].set_value(funded - fee);
 
 		for (auto & input : tx.inputs()) {
-			libbitcoin::endorsement signature;
-			if (!libbitcoin::chain::script::create_endorsement(signature, privkey.secret(), utxo_script, tx, 0, machine::all)) {
+			libbitcoin::system::endorsement signature;
+			if (!libbitcoin::system::chain::script::create_endorsement(signature, privkey.secret(), utxo_script, tx, 0, libbitcoin::system::machine::all)) {
 				throw std::runtime_error("Failed to sign input to tx");
 			}
-			libbitcoin::chain::script unlocking_script(libbitcoin::machine::operation::list({
-				libbitcoin::machine::operation(signature),
-				libbitcoin::machine::operation(to_chunk(privkey.to_public().point()))
+			libbitcoin::system::chain::script unlocking_script(libbitcoin::system::machine::operation::list({
+				libbitcoin::system::machine::operation(signature),
+				libbitcoin::system::machine::operation(libbitcoin::system::to_chunk(privkey.to_public().point()))
 			}));
 			input.set_script(unlocking_script);
 		}
@@ -166,38 +167,54 @@ public:
 		auto raw = tx.to_data();
 		std::cout << "bytes: " << raw.size() << std::endl;
 
-		std::cout << "Transaction: " << encode_base16(tx.to_data()) << std::endl;
-		std::cout << "txid: " << libbitcoin::encode_hash(tx.hash()) << std::endl;
+		std::cout << "Transaction: " << libbitcoin::system::encode_base16(tx.to_data()) << std::endl;
+		std::cout << "txid: " << libbitcoin::system::encode_hash(tx.hash()) << std::endl;
 		//*/
 
 
 		///*
-		libbitcoin::code result = libbitcoinasync("validate", &Client::transaction_pool_validate2, tx);
+		libbitcoin::system::code result = libbitcoinasync<libbitcoin::system::code>("validate", &Client::transaction_pool_validate2, tx);
 		if (result)  {
 			throw std::system_error(result, "validate");
 		}
 		//*/
-		utxos.push_back(libbitcoin::chain::point_value(libbitcoin::chain::point(tx.hash(), 1), tx.outputs()[1].value()));
-		libbitcoinasync("broadcast", &Client::transaction_pool_broadcast, tx);
-		return libbitcoin::encode_hash(tx.hash());
+		utxos.push_back(libbitcoin::system::chain::point_value(libbitcoin::system::chain::point(tx.hash(), 1), tx.outputs()[1].value()));
+		libbitcoinasync<int>("broadcast", &Client::transaction_pool_broadcast, tx);
+		return libbitcoin::system::encode_hash(tx.hash());
 	}
 
 private:
 	using Client = libbitcoin::client::obelisk_client;
-	using error_handler = libbitcoin::client::proxy::error_handler;
-	template <typename Result>
-	using result_handler = std::function<void(Result const &)>;
+	/*
+	template <typename... Result>
+	using result_handler = std::function<void(libbitcoin::system::code const &, Result const &...)>;
+	*/
 	Client client;
-	libbitcoin::wallet::ec_private privkey;
-	libbitcoin::wallet::payment_address address;
-	libbitcoin::chain::point_value::list utxos;
+	libbitcoin::system::wallet::ec_private privkey;
+	libbitcoin::system::wallet::payment_address address;
+	libbitcoin::system::hash_digest paymentkey;
+	libbitcoin::system::chain::point_value::list utxos;
 
-	void on_update(libbitcoin::code const & code, uint16_t sequence, size_t height, libbitcoin::hash_digest const & hash_digest)
+	void on_update(libbitcoin::system::code const & code, uint16_t sequence, size_t height, libbitcoin::system::hash_digest const & hash_digest)
 	{
-		std::cout << code << " " << sequence << " " << height << libbitcoin::encode_hash(hash_digest) << std::endl;
+		std::cout << code << " " << sequence << " " << height << libbitcoin::system::encode_hash(hash_digest) << std::endl;
 	}
 
-	template <typename Client, typename Result, typename... Args> Result returnresult(void (Client::*)(error_handler, result_handler<Result>, Args...));
+private:
+	template <typename Result, typename Function, typename... Args>
+	Result libbitcoinasync(std::string information, Function function, Args... args)
+	{
+		libbitcoin::system::code error;
+		Result result;
+		(client.*function)([&](libbitcoin::system::code const & code, auto... args){
+			error = code;
+			result = Result(args...);
+		}, args...);
+		if (error) {
+			throw std::system_error(error, information);
+		}
+		return result;
+	}
 };
 
 int main()
