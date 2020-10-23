@@ -197,7 +197,7 @@ private:
 
 	void on_update(libbitcoin::system::code const & code, uint16_t sequence, size_t height, libbitcoin::system::hash_digest const & hash_digest)
 	{
-		std::cout << code << " " << sequence << " " << height << libbitcoin::system::encode_hash(hash_digest) << std::endl;
+		std::cout << code << " " << code.message() << " " << sequence << " " << height << " " << libbitcoin::system::encode_hash(hash_digest) << std::endl;
 	}
 
 private:
