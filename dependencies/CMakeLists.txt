@@ -28,7 +28,13 @@ set (LIBBITCOIN_EPREFIX ${CMAKE_CURRENT_SOURCE_DIR}/prefix/${CMAKE_SYSTEM} CACHE
 set (LIBBITCOIN_INCLUDE_DIR ${LIBBITCOIN_PREFIX}/include)
 set (LIBBITCOIN_LIBRARY_DIR ${LIBBITCOIN_EPREFIX}/lib)
 
-set (LIBBITCOIN_LIBRARIES bitcoin-system CACHE INTERNAL "")
+include(ExternalProject)
+ExternalProject_Add(libicu
+	SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/icu/icu4c/source
+	INSTALL_DIR ${LIBBITCOIN_PREFIX}
+	CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --exec-prefix=${LIBBITCOIN_EPREFIX} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
+	BUILD_COMMAND make ${EXTERNAL_MAKE_FLAGS}
+)
 
 include(ExternalProject)
 ExternalProject_Add(libsecp256k1
@@ -45,6 +51,7 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system)
 add_custom_command(
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/src
 	DEPENDS libsecp256k1
+	DEPENDS libicu
 	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin.so.0.0.0
 	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-system
 	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-system/configure ]; then
@@ -204,3 +211,5 @@ set_target_properties(bitcoin-explorer PROPERTIES
 	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.so.0.0.0
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
 )
+
+set (LIBBITCOIN_LIBRARIES bitcoin-system CACHE INTERNAL "")
