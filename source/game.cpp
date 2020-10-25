@@ -202,7 +202,7 @@ private:
 
 int main()
 {
-	string test_string = "Have fun being able to retain something rather than having it destroyed!";
+	string test_string = "Have fun retaining any information at all!";
 	vector<uint8_t> test_data(test_string.begin(), test_string.end());
 
 	//std::string cryptkey = ashesofshreddeddocument::new_encrypted_user("Caring behavior is more precious than anything else.");

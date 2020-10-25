@@ -185,31 +185,31 @@ set_target_properties(bitcoin-client PROPERTIES
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
 )
 
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer)
-add_custom_command(
-	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/src
-	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.so.0.0.0
-	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer
-	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure ]; then
-		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer
-	$<SEMICOLON> fi
-	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer/Makefile ]; then 
-		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure 
-			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
-			--without-examples --without-tests
-			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
-			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
-			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
-	$<SEMICOLON> fi
-	COMMAND make ${EXTERNAL_MAKE_FLAGS}
-	COMMAND make install-exec install-docDATA install-pkgconfigDATA
-)
-add_custom_target(libbitcoin-explorer DEPENDS libbitcoin-client libbitcoin-network ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.so.0.0.0)
-add_library(bitcoin-explorer SHARED IMPORTED GLOBAL)
-add_dependencies(bitcoin-explorer libbitcoin-explorer)
-set_target_properties(bitcoin-explorer PROPERTIES
-	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.so.0.0.0
-	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
-)
+#file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer)
+#add_custom_command(
+#	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/src
+#	OUTPUT ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.so.0.0.0
+#	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer
+#	COMMAND if ! [ -e ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure ]; then
+#		autoreconf -i ${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer
+#	$<SEMICOLON> fi
+#	COMMAND if ! [ -e ${CMAKE_CURRENT_BINARY_DIR}/libbitcoin-explorer/Makefile ]; then 
+#		${CMAKE_CURRENT_SOURCE_DIR}/libbitcoin-explorer/configure 
+#			--prefix=${LIBBITCOIN_PREFIX} --exec-prefix=${LIBBITCOIN_EPREFIX} #--disable-shared
+#			--without-examples --without-tests
+#			"CPPFLAGS=${CMAKE_C_FLAGS} -DBOOST_ALL_DYN_LINK=1 -I${LIBBITCOIN_INCLUDE_DIR}"
+#			"LDFLAGS=-L${LIBBITCOIN_LIBRARY_DIR}"
+#			"PKG_CONFIG_PATH=${LIBBITCOIN_EPREFIX}/lib/pkgconfig"
+#	$<SEMICOLON> fi
+#	COMMAND make ${EXTERNAL_MAKE_FLAGS}
+#	COMMAND make install-exec install-docDATA install-pkgconfigDATA
+#)
+#add_custom_target(libbitcoin-explorer DEPENDS libbitcoin-client libbitcoin-network ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.so.0.0.0)
+#add_library(bitcoin-explorer SHARED IMPORTED GLOBAL)
+#add_dependencies(bitcoin-explorer libbitcoin-explorer)
+#set_target_properties(bitcoin-explorer PROPERTIES
+#	IMPORTED_LOCATION ${LIBBITCOIN_LIBRARY_DIR}/libbitcoin-explorer.so.0.0.0
+#	INTERFACE_INCLUDE_DIRECTORIES ${LIBBITCOIN_INCLUDE_DIR}
+#)
 
 set (LIBBITCOIN_LIBRARIES bitcoin-system CACHE INTERNAL "")
