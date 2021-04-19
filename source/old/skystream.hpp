@@ -17,13 +17,20 @@
  * The way to do random writes is to reference the previous tree as underlying data,
  * and then include metadata for all the blocks that cannot be accessed in the number of
  * requests equal to the height of the tree.  This means iterating through all the chunks, and
- * it means outputting data with holes in it.  Iteration is sped if maximum depth is in metadata.
+ * it means outputting data with holes in it.  Iteration is sped by using depth attribute to skip.
+ *
+ * The tree is deepened when both the leaf count increases, and the last tail was balanced:
+ * i.e. its lookup_nodes list had two disparate nodes each with the same depth one less than its.
+ * The leaf count increases when the data written does not precisely align with a previous chunk.
  *
  * In the case of append-only, this simplifies to the same dat-inspired algorithm.
  *
+ * TODO after: make an interface function that provides for many random writes at once, and
+ * store them consolidated.
+ *
  * It would be fine, afterwards, to offer a block device with fuse that has size equal to the
- * full extent of uint64_t.  You could also make data isomorphically interchangeable with
- * a git repository.
+ * full integer extent of the offset datatype.  You could also make data isomorphically
+ * interchangeable with a git repository.
  */
 
 using seconds_t = double;
@@ -99,43 +106,58 @@ public:
 	{
 		std::lock_guard<std::mutex> writelock(writemtx);
 
+		// the current top node is self->tail
+		
 		std::unique_lock<std::mutex> lock(methodmtx);
 		seconds_t end_time = time();
 		seconds_t start_time = tail.metadata["content"]["spans"]["time"]["end"];
 		
-		node head_node;
+		// for the case of middle-writing, head_node is the node containing the start point
+		node * head_node;
+		// head_bounds stores the bounds of the head node, with bytes shifted to accommodate added data
 		nlohmann::json head_bounds;
 		unsigned long long start_bytes;
-		//unsigned long long full_size = data.size(); // let's try to implement by reusing surrounding data
+		// calculate start index (index always increments)
 		unsigned long long index = tail.metadata["content"]["spans"]["index"]["end"];
+		// calculate start bytes
+		// TODO: these cases can be merged by catching out of bounds for head node
 		if (offset == tail.metadata["content"]["spans"][span]["end"]) {
 			// append case, no head node to replace
 			start_bytes = tail.metadata["content"]["spans"]["bytes"]["end"];
+			head_node = &tail;
+			head_bounds = head_node->metadata["content"]["bounds"];
 			//full_size = data.size();
 		} else {
+			// non-append: find head node
+
 			nlohmann::json head_node_bounds;
-			head_node = this->get_node(this->tail, span, offset, {}, worker);
-			auto head_node_content = head_node.metadata["content"];
+			head_node = &get_node(this->tail, span, offset, {}, worker);
+			auto head_node_content = head_node->metadata["content"];
 			double start_head = head_node_content["bounds"][span]["start"];
-			start_bytes = head_node_content["bounds"]["bytes"]["start"]; 
-			if (offset != start_head) {
-				if (span != "bytes") {
+
+			if (span == "bytes") {
+				start_bytes = offset;
+			} else {
+				if (offset != start_head) {
+					// this throws because we don't know how spans might interpolate inside data.
 					throw std::runtime_error(span + " " + std::to_string(offset) + " is within block span");
+				}
+				start_bytes = head_node_content["bounds"]["bytes"]["start"]; 
+			}
+
+			// fill head_bounds, adjusting bytes to remove the bit we replaced.
+			for (auto bound : head_node_content["bounds"].items()) {
+				if (bound.key() == "bytes") {
+					head_bounds["bytes"] = {{"start", bound.value()["start"]},{"end", start_bytes}};
 				} else {
-					start_bytes = offset;
-					for (auto bound : head_node_content["bounds"].items()) {
-						if (bound.key() == "bytes") {
-							head_bounds["bytes"] = {{"start", bound.value()["start"]},{"end", start_bytes}};
-						} else {
-							head_bounds[bound.key()] = {{"start", bound.value()["start"]},{"end", bound.value()["end"]}};
-						}
-					}
+					head_bounds[bound.key()] = {{"start", bound.value()["start"]},{"end", bound.value()["end"]}};
 				}
 			}
-			//full_size = data.size() + offset - start_head; // full_size is the number of bytes including the beginning bits of head_node
 		}
+		// calculate end bytes
 		unsigned long long end_bytes = start_bytes + data.size(); /*full_size*/
-		nlohmann::json spans = { // these are the spans of the new write
+		// these are the spans of the new write
+		nlohmann::json spans = {
 			{"time", {{"start", start_time},{"end", end_time}}},
 			{"bytes", {{"start", start_bytes},{"end", end_bytes}}},
 			{"index", {{"start", index}, {"end", index + 1}}}
@@ -147,17 +169,19 @@ public:
 			auto tail_node_content = tail_node->metadata["content"];
 			if (end_bytes != tail_node_content["bounds"]["bytes"]["start"]) {
 				for (auto bound : tail_node_content["bounds"].items()) {
-						if (bound.key() == "bytes") {
-							tail_bounds["bytes"] = {{"start", end_bytes},{"end", bound.value()["end"]}};
-						} else {
-							tail_bounds[bound.key()] = {{"start", bound.value()["start"]},{"end", bound.value()["end"]}};
-						}
+					if (bound.key() == "bytes") {
+						tail_bounds["bytes"] = {{"start", end_bytes},{"end", bound.value()["end"]}};
+					} else {
+						tail_bounds[bound.key()] = {{"start", bound.value()["start"]},{"end", bound.value()["end"]}};
+					}
 				}
 			}
 		} catch (std::out_of_range const &) {
 			tail_node = &tail;
 		}
 
+		// todo: when finding new lookup nodes, we just consolidate the old ones
+		// when the depth is reasonable
 		nlohmann::json lookup_nodes = nlohmann::json::array();
 		//size_t depth = 0;
 		nlohmann::json new_lookup_node;
@@ -262,7 +286,7 @@ public:
 			// note: we can't merge this lookup node with previous because it is the only one with a link to its content.
 		if (!head_bounds.is_null()) {
 			lookup_nodes.emplace_back(nlohmann::json{
-				{"identifiers", head_node.identifiers},
+				{"identifiers", head_node->identifiers},
 				{"spans", head_bounds},
 				{"depth", 0} // now .... will this get merged if we append to tail after this?
 						// when appending we assuming depth reduces forward, which is no longer true.
