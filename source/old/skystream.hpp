@@ -13,6 +13,19 @@
 
 #include "crypto.hpp"
 
+/*
+ * The way to do random writes is to reference the previous tree as underlying data,
+ * and then include metadata for all the blocks that cannot be accessed in the number of
+ * requests equal to the height of the tree.  This means iterating through all the chunks, and
+ * it means outputting data with holes in it.  Iteration is sped if maximum depth is in metadata.
+ *
+ * In the case of append-only, this simplifies to the same dat-inspired algorithm.
+ *
+ * It would be fine, afterwards, to offer a block device with fuse that has size equal to the
+ * full extent of uint64_t.  You could also make data isomorphically interchangeable with
+ * a git repository.
+ */
+
 using seconds_t = double;
 
 seconds_t time()
