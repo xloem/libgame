@@ -13,11 +13,11 @@ public:
 	: bandwidth{bytes_bandwidth_down / connections_down, bytes_bandwidth_up / connections_up}
 	{
 		for (size_t i = 0; i < connections_down; ++ i) {
-			workers[skynet_multiportal::download].emplace_back(worker{i, std::unique_ptr<skynet>(new skynet())});
+			workers[skynet_multiportal::download].emplace_back(worker{i, std::unique_ptr<skynet>(new skynet()), {}});
 			free[skynet_multiportal::download].push_back(i);
 		}
 		for (size_t i = 0; i < connections_up; ++ i) {
-			workers[skynet_multiportal::upload].emplace_back(worker{i, std::unique_ptr<skynet>(new skynet())});
+			workers[skynet_multiportal::upload].emplace_back(worker{i, std::unique_ptr<skynet>(new skynet()), {}});
 			free[skynet_multiportal::upload].push_back(i);
 		}
 	}
