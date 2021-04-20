@@ -79,6 +79,7 @@ public:
 
 	std::vector<uint8_t> read(std::string span, double & offset, std::string flow = "real", sia::portalpool::worker const * worker = 0)
 	{
+		(void)flow;
 		auto metadata = this->get_node(tail, span, offset, {}, worker).metadata;
 		std::lock_guard<std::mutex> lock(methodmtx);
 		auto metadata_content = metadata["content"];
@@ -106,7 +107,7 @@ public:
 	{
 		std::lock_guard<std::mutex> writelock(writemtx);
 
-		// the current top node is self->tail
+		// the current top node is this->tail
 		
 		std::unique_lock<std::mutex> lock(methodmtx);
 		seconds_t end_time = time();
@@ -139,7 +140,7 @@ public:
 				start_bytes = offset;
 			} else {
 				if (offset != start_head) {
-					// this throws because we don't know how spans might interpolate inside data.
+					// throw here because we don't know how spans might interpolate inside data.  user would have to provide all spans.
 					throw std::runtime_error(span + " " + std::to_string(offset) + " is within block span");
 				}
 				start_bytes = head_node_content["bounds"]["bytes"]["start"]; 
@@ -156,13 +157,15 @@ public:
 		}
 		// calculate end bytes
 		unsigned long long end_bytes = start_bytes + data.size(); /*full_size*/
-		// these are the spans of the new write
+		// these are the spans of the new write, for now
 		nlohmann::json spans = {
 			{"time", {{"start", start_time},{"end", end_time}}},
 			{"bytes", {{"start", start_bytes},{"end", end_bytes}}},
 			{"index", {{"start", index}, {"end", index + 1}}}
 		};
+		// for the case of middle-writing, tail_node is the node containing the end point
 		node * tail_node;
+		// tail_bounds stores the bounds of the tail node, with bytes shifted to accommodate added data
 		nlohmann::json tail_bounds;
 		try {
 			tail_node = &get_node(tail, "bytes", end_bytes, {}, worker);
@@ -175,9 +178,12 @@ public:
 						tail_bounds[bound.key()] = {{"start", bound.value()["start"]},{"end", bound.value()["end"]}};
 					}
 				}
+			} else {
+				tail_bounds = tail_node->metadata["content"]["bounds"];
 			}
 		} catch (std::out_of_range const &) {
 			tail_node = &tail;
+			tail_bounds = tail_node->metadata["content"]["bounds"];
 		}
 
 		// todo: when finding new lookup nodes, we just consolidate the old ones
