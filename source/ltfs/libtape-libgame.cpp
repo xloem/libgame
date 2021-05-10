@@ -1,4 +1,11 @@
 #include <ltfs/libltfs/tape_ops.h>
+#include <ltfs/libltfs/ltfs_error.h>
+#include "../old/skystream.hpp"
+
+static sia::portalpool static_pool;
+
+int   libgame_test_unit_ready(void *device);
+int libgame_locate(void *device, struct tc_position dest, struct tc_position *pos);
 
 /**
  * Open a device.
@@ -11,7 +18,7 @@
  */
 int libgame_open(const char *devname, void **handle)
 {
-	*handle = new skystream(devname);
+	*handle = new skystream(static_pool, "skylink", devname);
 	return 0;
 }
 
@@ -25,6 +32,8 @@ int libgame_open(const char *devname, void **handle)
  */
 int libgame_reopen(const char *devname, void *handle)
 {
+	(void)devname;
+	(void)handle;
 	return 0;
 }
 
@@ -45,7 +54,11 @@ int   libgame_close(void *device)
  * @param device a pointer to the ibmtape backend
  * @return 0 on success or a negative value on error
  */
-int   libgame_close_raw(void *device) { return 0; }
+int   libgame_close_raw(void *device)
+{
+	(void)device;
+	return 0;
+}
 
 /**
  * Verify if a tape device is connected to the host.
@@ -55,9 +68,8 @@ int   libgame_close_raw(void *device) { return 0; }
  */
 int   libgame_is_connected(const char *devname)
 {
-	skystream s(devname);
-	s.length("bytes");
-	return 0;
+	skystream s(static_pool, "skylink", devname);
+	return libgame_test_unit_ready(&s);
 }
 
 /**
@@ -72,6 +84,8 @@ int   libgame_is_connected(const char *devname)
  */
 int   libgame_inquiry(void *device, struct tc_inq *inq)
 {
+	(void)device;
+	(void)inq;
 	memset(inq, 0, sizeof(*inq));
 	return 0;
 }
@@ -86,8 +100,10 @@ int   libgame_inquiry(void *device, struct tc_inq *inq)
  */
 int   libgame_inquiry_page(void *device, unsigned char page, struct tc_inq_page *inq)
 {
+	(void)device;
+	(void)page;
 	memset(inq, 0, sizeof(*inq));
-	return 0;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -99,7 +115,9 @@ int   libgame_inquiry_page(void *device, unsigned char page, struct tc_inq_page 
  */
 int   libgame_test_unit_ready(void *device)
 {
-	return libgame_is_connected(device);
+	skystream * s = (skystream *)device;
+	s->length("bytes");
+	return 0;
 }
 
 /**
@@ -122,14 +140,16 @@ int   libgame_test_unit_ready(void *device)
  */
 int   libgame_read(void *device, char *buf, size_t count, struct tc_position *pos, const bool unusual_size)
 {
-	skystream * s = device;
+	skystream * s = (skystream *)device;
 	auto real_size = s->block_spans("index", pos->block)["bytes"];
-	if (real_size > count) {
-		return -LTFS_SMALL_BLOCKSIZE;
+	if (real_size.second - real_size.first > count) {
+		return -EDEV_BUFFER_OVERFLOW; /* is this the right code? */
 	}
-	auto data = s->read("index", pos->block);
+	double index = pos->block;
+	auto data = s->read("index", index);
 	memcpy(buf, data.data(), data.size());
 	++ pos->block;
+	(void)unusual_size;
 	return data.size();
 }
 
@@ -171,8 +191,9 @@ int   libgame_read(void *device, char *buf, size_t count, struct tc_position *po
  */
 int libgame_write(void *device, const char *buf, size_t count, struct tc_position *pos)
 {
-	skystream * s = device;
-	s->write({buf, buf + count}, "index", pos->block);
+	skystream * s = (skystream *)device;
+	double index = pos->block;
+	s->write({buf, buf + count}, "index", index);
 	++ pos->block;
 	pos->early_warning = 0;
 	pos->programmable_early_warning = 0;
@@ -198,9 +219,12 @@ int libgame_write(void *device, const char *buf, size_t count, struct tc_positio
  */
 int libgame_writefm(void *device, size_t count, struct tc_position *pos, bool immed)
 {
+	(void)device;
+	(void)count;
+	(void)immed;
 	pos->early_warning = 0;
 	pos->programmable_early_warning = 0;
-	return 0;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -217,7 +241,7 @@ int libgame_writefm(void *device, size_t count, struct tc_position *pos, bool im
 int   libgame_rewind(void *device, struct tc_position *pos)
 {
 	struct tc_position dest = *pos;
-	dest->block = 0;
+	dest.block = 0;
 	return libgame_locate(device, dest, pos);
 }
 
@@ -240,8 +264,8 @@ int   libgame_rewind(void *device, struct tc_position *pos)
  */
 int libgame_locate(void *device, struct tc_position dest, struct tc_position *pos)
 {
-	skystream * s = device;
-	s->block_spans("index", dest->block);
+	skystream * s = (skystream *)device;
+	s->block_spans("index", dest.block);
 	pos->block = dest.block;
 	pos->early_warning = 0;
 	pos->programmable_early_warning = 0;
@@ -279,11 +303,12 @@ int libgame_locate(void *device, struct tc_position dest, struct tc_position *po
  */
 int libgame_space(void *device, size_t count, TC_SPACE_TYPE type, struct tc_position *pos)
 {
-	skystream * s = device;
+	skystream * s = (skystream *)device;
+	(void)count;
 	switch(type)
 	{
  	case TC_SPACE_EOD: // space to end of data on the current partition.
-		pos->block = s->length("index").second;
+		pos->block = s->length("index");
 		break;
 	case TC_SPACE_FM_F: // space forward by file marks. // fall-thru
 	case TC_SPACE_FM_B: // space backward by file marks.
@@ -309,7 +334,10 @@ int libgame_space(void *device, size_t count, TC_SPACE_TYPE type, struct tc_posi
  */
 int   libgame_erase(void *device, struct tc_position *pos, bool long_erase)
 {
-	return -LTFS_OP_NOT_ALLOWED;
+	(void)device;
+	(void)pos;
+	(void)long_erase;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -327,6 +355,7 @@ int   libgame_erase(void *device, struct tc_position *pos, bool long_erase)
  */
 int   libgame_load(void *device, struct tc_position *pos)
 {
+	(void)device;
 	pos->block = ~0;
 	return 0;
 }
@@ -341,8 +370,9 @@ int   libgame_load(void *device, struct tc_position *pos)
  */
 int   libgame_unload(void *device, struct tc_position *pos)
 {
+	(void)device;
 	pos->block = ~0;
-	return -UNSUPPORTED_FUNCTION;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -355,7 +385,7 @@ int   libgame_unload(void *device, struct tc_position *pos)
  */
 int   libgame_readpos(void *device, struct tc_position *pos)
 {
-	skystream * s = device;
+	skystream * s = (skystream *)device;
 	pos->block = s->length("index");
 	return 0;
 }
@@ -369,7 +399,9 @@ int   libgame_readpos(void *device, struct tc_position *pos)
  */
 int   libgame_setcap(void *device, uint16_t proportion)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)proportion;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -386,7 +418,12 @@ int   libgame_setcap(void *device, uint16_t proportion)
  */
 int   libgame_format(void *device, TC_FORMAT_TYPE format, const char *vol_name, const char *barcode_name, const char *vol_mam_uuid)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)format;
+	(void)vol_name;
+	(void)barcode_name;
+	(void)vol_mam_uuid;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 
@@ -400,6 +437,7 @@ int   libgame_format(void *device, TC_FORMAT_TYPE format, const char *vol_name, 
  */
 int   libgame_remaining_capacity(void *device, struct tc_remaining_cap *cap)
 {
+	(void)device;
 	cap->remaining_p0 = ~0;
 	cap->remaining_p1 = 0;
 	cap->max_p0 = ~0;
@@ -421,6 +459,11 @@ int   libgame_remaining_capacity(void *device, struct tc_remaining_cap *cap)
 int   libgame_logsense(void *device, const uint8_t page, const uint8_t subpage,
 				  unsigned char *buf, const size_t size)
 {
+	(void)device;
+	(void)page;
+	(void)subpage;
+	(void)buf;
+	(void)size;
 	return -1;
 }
 
@@ -439,6 +482,10 @@ int   libgame_logsense(void *device, const uint8_t page, const uint8_t subpage,
  */
 int   libgame_modesense(void *device, const uint8_t page, const TC_MP_PC_TYPE pc, const uint8_t subpage, unsigned char *buf, const size_t size)
 {
+	(void)device;
+	(void)page;
+	(void)pc;
+	(void)subpage;
 	memset(buf, 0, size);
 	//buf[16] = page;
 	return 0;
@@ -455,6 +502,9 @@ int   libgame_modesense(void *device, const uint8_t page, const TC_MP_PC_TYPE pc
  */
 int   libgame_modeselect(void *device, unsigned char *buf, const size_t size)
 {
+	(void)device;
+	(void)buf;
+	(void)size;
 	return 0;
 }
 
@@ -467,6 +517,7 @@ int   libgame_modeselect(void *device, unsigned char *buf, const size_t size)
  */
 int   libgame_reserve_unit(void *device)
 {
+	(void)device;
 	return 0;
 }
 
@@ -479,6 +530,7 @@ int   libgame_reserve_unit(void *device)
  */
 int   libgame_release_unit(void *device)
 {
+	(void)device;
 	return 0;
 }
 
@@ -490,6 +542,7 @@ int   libgame_release_unit(void *device)
  */
 int   libgame_prevent_medium_removal(void *device)
 {
+	(void)device;
 	return 0;
 }
 
@@ -500,6 +553,7 @@ int   libgame_prevent_medium_removal(void *device)
  */
 int   libgame_allow_medium_removal(void *device)
 {
+	(void)device;
 	return 0;
 }
 
@@ -521,8 +575,11 @@ int   libgame_allow_medium_removal(void *device)
  */
 int   libgame_read_attribute(void *device, const tape_partition_t part, const uint16_t id, unsigned char *buf, const size_t size)
 {
+	(void)device;
+	(void)part;
+	(void)id;
 	memset(buf, 0, size);
-	return -UNSUPPORTED_FUNCTION;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -540,7 +597,11 @@ int   libgame_read_attribute(void *device, const tape_partition_t part, const ui
  */
 int   libgame_write_attribute(void *device, const tape_partition_t part, const unsigned char *buf, const size_t size)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)part;
+	(void)buf;
+	(void)size;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -553,14 +614,14 @@ int   libgame_write_attribute(void *device, const tape_partition_t part, const u
  */
 int   libgame_allow_overwrite(void *device, const struct tc_position pos)
 {
-	skystream * s = device;
-	if (pos->block == s->length("index"))
+	skystream * s = (skystream *)device;
+	if (pos.block == s->length("index"))
 	{
 		return 0;
 	}
 	else
 	{
-		return -LTFS_OP_NOT_ALLOWED;
+		return -EDEV_UNSUPPORTED_FUNCTION;
 	}
 
 }
@@ -576,6 +637,9 @@ int   libgame_allow_overwrite(void *device, const struct tc_position pos)
  */
 int   libgame_set_compression(void *device, const bool enable_compression, struct tc_position *pos)
 {
+	(void)device;
+	(void)enable_compression;
+	(void)pos;
 	return 0;
 }
 
@@ -589,6 +653,7 @@ int   libgame_set_compression(void *device, const bool enable_compression, struc
  */
 int   libgame_set_default(void *device)
 {
+	(void)device;
 	return 0;
 }
 
@@ -601,11 +666,11 @@ int   libgame_set_default(void *device)
  */
 int   libgame_get_cartridge_health(void *device, struct tc_cartridge_health *cart_health)
 {
-	skystream * s = device;
+	skystream * s = (skystream *)device;
 	memset(cart_health, ~0, sizeof(*cart_health));
 	auto lengths = s->lengths();
 	cart_health->written_ds = lengths["index"];
-	cart_health->writte_mbytes = lengths["bytes"] / 1024 / 1024;
+	cart_health->written_mbytes = lengths["bytes"] / 1024 / 1024;
 	return 0;
 }
 
@@ -619,6 +684,7 @@ int   libgame_get_cartridge_health(void *device, struct tc_cartridge_health *car
  */
 int   libgame_get_tape_alert(void *device, uint64_t *tape_alert)
 {
+	(void)device;
 	*tape_alert = -1;
 	return 0;
 }
@@ -631,6 +697,8 @@ int   libgame_get_tape_alert(void *device, uint64_t *tape_alert)
  */
 int   libgame_clear_tape_alert(void *device, uint64_t tape_alert)
 {
+	(void)device;
+	(void)tape_alert;
 	return 0;
 }
 
@@ -643,7 +711,10 @@ int   libgame_clear_tape_alert(void *device, uint64_t tape_alert)
  */
 int   libgame_get_xattr(void *device, const char *name, char **buf)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)name;
+	(void)buf;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -656,7 +727,11 @@ int   libgame_get_xattr(void *device, const char *name, char **buf)
  */
 int   libgame_set_xattr(void *device, const char *name, const char *buf, size_t size)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)name;
+	(void)buf;
+	(void)size;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -669,6 +744,7 @@ int   libgame_set_xattr(void *device, const char *name, const char *buf, size_t 
  */
 int   libgame_get_parameters(void *device, struct tc_drive_param *params)
 {
+	(void)device;
 	memset(params, 0, sizeof(*params));
 	params->max_blksize = 1024 * 1024 * 128;
 	return 0;
@@ -684,7 +760,9 @@ int   libgame_get_parameters(void *device, struct tc_drive_param *params)
  */
 int   libgame_get_eod_status(void *device, int part)
 {
-	return UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)part;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 
@@ -700,7 +778,9 @@ int   libgame_get_eod_status(void *device, int part)
  */
 int   libgame_get_device_list(struct tc_drive_info *buf, int count)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)buf;
+	(void)count;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -711,6 +791,7 @@ int   libgame_get_device_list(struct tc_drive_info *buf, int count)
  */
 void  libgame_help_message(const char *progname)
 {
+	(void)progname;
 	std::cout << "(todo: libgame ltfs help message)" << std::endl;
 }
 
@@ -725,6 +806,8 @@ void  libgame_help_message(const char *progname)
  */
 int   libgame_parse_opts(void *device, void *opt_args)
 {
+	(void)device;
+	(void)opt_args;
 	return 0;
 }
 
@@ -748,7 +831,10 @@ const char *libgame_default_device_name(void)
  */
 int   libgame_set_key(void *device, const unsigned char *keyalias, const unsigned char *key)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)keyalias;
+	(void)key;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -760,7 +846,9 @@ int   libgame_set_key(void *device, const unsigned char *keyalias, const unsigne
  */
 int   libgame_get_keyalias(void *device, unsigned char **keyalias)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)keyalias;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -770,7 +858,9 @@ int   libgame_get_keyalias(void *device, unsigned char **keyalias)
  */
 int   libgame_takedump_drive(void *device, bool capture_unforced)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)capture_unforced;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -794,6 +884,10 @@ int   libgame_is_mountable(void *device,
 					  const unsigned char cart_type,
 					  const unsigned char density)
 {
+	(void)device;
+	(void)barcode;
+	(void)cart_type;
+	(void)density;
 	return 0;
 }
 
@@ -805,6 +899,7 @@ int   libgame_is_mountable(void *device,
  */
 int   libgame_get_worm_status(void *device, bool *is_worm)
 {
+	(void)device;
 	*is_worm = 1;
 	return 0;
 }
@@ -819,7 +914,9 @@ int   libgame_get_worm_status(void *device, bool *is_worm)
  */
 int   libgame_get_serialnumber(void *device, char **result)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)result;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -831,7 +928,8 @@ int   libgame_get_serialnumber(void *device, char **result)
  */
 int   libgame_get_info(void *device, struct tc_drive_info *info)
 {
-	memset(info, 0, sizeof(info));
+	(void)device;
+	memset(info, 0, sizeof(*info));
 	return 0;
 }
 
@@ -844,7 +942,10 @@ int   libgame_get_info(void *device, struct tc_drive_info *info)
  */
 int   libgame_set_profiler(void *device, char *work_dir, bool enable)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)work_dir;
+	(void)enable;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -855,7 +956,9 @@ int   libgame_set_profiler(void *device, char *work_dir, bool enable)
  */
 int   libgame_get_block_in_buffer(void *device, unsigned int *block)
 {
-	return -UNSUPPORTED_FUNCTION;
+	(void)device;
+	(void)block;
+	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -864,6 +967,7 @@ int   libgame_get_block_in_buffer(void *device, unsigned int *block)
  */
 bool   libgame_is_readonly(void *device)
 {
+	(void)device;
 	return 0;
 }
 

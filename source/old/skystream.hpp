@@ -103,7 +103,7 @@ public:
 	}
 
 	std::mutex writemtx;
-	void write(std::vector<uint8_t> & data, std::string span, double offset, sia::portalpool::worker const * worker = 0)
+	void write(std::vector<uint8_t> const & data, std::string span, double offset, sia::portalpool::worker const * worker = 0)
 	{
 		std::lock_guard<std::mutex> writelock(writemtx);
 
