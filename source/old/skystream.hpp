@@ -77,7 +77,7 @@ public:
 	skystream(skystream const &) = default;
 	skystream(skystream &&) = default;
 
-	std::vector<uint8_t> read(std::string span, double & offset, std::string flow = "real", sia::portalpool::worker const * worker = 0)
+	std::vector<uint8_t> read(std::string span, double & offset, std::string flow = "real", nlohmann::json * user_metadata = nullptr, sia::portalpool::worker const * worker = 0)
 	{
 		(void)flow;
 		auto metadata = this->get_node(tail, span, offset, {}, worker).metadata;
@@ -99,11 +99,14 @@ public:
 			end = data.end();
 		}
 		offset = metadata_content["bounds"][span]["end"];
+		if (nullptr != user_metadata) {
+			*user_metadata = metadata["metadata"];
+		}
 		return {begin, end};
 	}
 
 	std::mutex writemtx;
-	void write(std::vector<uint8_t> const & data, std::string span, double offset, sia::portalpool::worker const * worker = 0)
+	void write(std::vector<uint8_t> const & data, std::string span, double offset, nlohmann::json const & user_metadata = {}, sia::portalpool::worker const * worker = 0)
 	{
 		std::lock_guard<std::mutex> writelock(writemtx);
 
@@ -318,6 +321,9 @@ public:
 			*/
 			{"lookup", lookup_nodes}
 		};
+		if (! user_metadata.is_null()) {
+			metadata_json["metadata"] = user_metadata;
+		}
 		std::string metadata_string = metadata_json.dump();
 		//std::cerr << metadata_string << std::endl;
 

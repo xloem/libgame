@@ -14,43 +14,59 @@ class libgame_tape
 public:
 	libgame_tape(char const *historyfilename)
 	: devname(historyfilename),
-	  histfile(devname),
-	  ss(pool, init_idents())
+	  histfile(devname)
 	{
+		nlohmann::json last_identifiers;
 		try {
-			root = ss.identifiers("index", 0);
-		} catch (std::out_of_range const &) {
-			root = ss.identifiers();
+
+			histfile.seekg(-4096, std::ios_base::end);
+			while (histfile.peek() != EOF) {
+				last_identifiers = nlohmann::json::parse(histfile);
+			}
+		} catch (nlohmann::detail::parse_error const &) { }
+
+		if (last_identifiers.is_null()) {
+			parts.emplace_back(new skystream(pool));
+			parts.emplace_back(new skystream(pool));
+			root = parts[0]->identifiers();
+			return;
 		}
+
+		std::unique_ptr<skystream> last_stream{new skystream(pool, last_identifiers)};
+		nlohmann::json last_metadata;
+		double tailidx = parts[0]->length("index");
+		last_stream->read("index", tailidx, "real", &last_metadata);
+		for (size_t idx = 0; idx < 1 + last_metadata["siblings"].size(); ++ idx) {
+			if (idx == last_metadata["number"]) {
+				parts.emplace_back(std::move(last_stream));
+			} else {
+				parts.emplace_back(new skystream(pool, last_metadata["siblings"][idx]));
+			}
+		}
+		root = parts[0]->identifiers("index", 0);
 	}
 
-	void flush()
+	void write(const char *buf, size_t count, size_t partition, double index)
 	{
+		nlohmann::json metadata = {
+			{"number", partition}
+		};
+		for (size_t idx = 0; idx < parts.size(); ++ idx) {
+			if (idx == partition) {
+				continue;
+			}
+			metadata[idx] = parts[idx]->identifiers();
+		}
+		parts[partition]->write({buf, buf + count}, "index", index, metadata);
 		histfile.seekg(0, std::ios_base::end);
-		histfile << ss.identifiers();
+		histfile << parts[partition]->identifiers();
 	}
 
 	sia::portalpool pool;
 	std::string devname;
 	std::fstream histfile;
-	skystream ss;
+	std::vector<std::unique_ptr<skystream>> parts;
 	nlohmann::json root;
-
-private:
-	nlohmann::json init_idents()
-	{
-		nlohmann::json result;
-		try {
-
-			histfile.seekg(-4096, std::ios_base::end);
-			while (histfile.peek() != EOF) {
-				result = nlohmann::json::parse(histfile);
-			}
-		} catch (nlohmann::detail::parse_error const &) {
-			return {};
-		}
-		return result;
-	}
 };
 
 /**
@@ -161,8 +177,7 @@ int   libgame_inquiry_page(void *device, unsigned char page, struct tc_inq_page 
  */
 int   libgame_test_unit_ready(void *device)
 {
-	libgame_tape * s = (libgame_tape *)device;
-	s->ss.length("bytes");
+	(void)device;
 	return 0;
 }
 
@@ -187,12 +202,13 @@ int   libgame_test_unit_ready(void *device)
 int   libgame_read(void *device, char *buf, size_t count, struct tc_position *pos, const bool unusual_size)
 {
 	libgame_tape * s = (libgame_tape *)device;
-	auto real_size = s->ss.block_spans("index", pos->block)["bytes"];
+	auto & stream = *s->parts[pos->partition];
+	auto real_size = stream.block_spans("index", pos->block)["bytes"];
 	if (real_size.second - real_size.first > count) {
 		return -EDEV_BUFFER_OVERFLOW; /* is this the right code? */
 	}
 	double index = pos->block;
-	auto data = s->ss.read("index", index);
+	auto data = stream.read("index", index);
 	memcpy(buf, data.data(), data.size());
 	++ pos->block;
 	(void)unusual_size;
@@ -238,9 +254,7 @@ int   libgame_read(void *device, char *buf, size_t count, struct tc_position *po
 int libgame_write(void *device, const char *buf, size_t count, struct tc_position *pos)
 {
 	libgame_tape * s = (libgame_tape *)device;
-	double index = pos->block;
-	s->ss.write({buf, buf + count}, "index", index);
-	s->flush();
+	s->write(buf, count, pos->partition, pos->block);
 	++ pos->block;
 	pos->early_warning = 0;
 	pos->programmable_early_warning = 0;
@@ -289,6 +303,7 @@ int   libgame_rewind(void *device, struct tc_position *pos)
 {
 	struct tc_position dest = *pos;
 	dest.block = 0;
+	dest.partition = 0;
 	return libgame_locate(device, dest, pos);
 }
 
@@ -312,17 +327,15 @@ int   libgame_rewind(void *device, struct tc_position *pos)
 int libgame_locate(void *device, struct tc_position dest, struct tc_position *pos)
 {
 	libgame_tape * s = (libgame_tape *)device;
-	if (dest.partition > 0) {
-		return -EDEV_INVALID_ARG;
-	}
 	try {
-		s->ss.block_spans("index", dest.block);
+		s->parts[dest.partition]->block_spans("index", dest.block);
 	} catch (std::out_of_range const &) {
-		if (dest.block != 0) {
+		if (dest.block != 0 || dest.partition > 1) {
 			return -EDEV_INVALID_ARG;
 		}
 	}
 	pos->block = dest.block;
+	pos->partition = dest.partition;
 	pos->early_warning = 0;
 	pos->programmable_early_warning = 0;
 	return 0;
@@ -360,23 +373,23 @@ int libgame_locate(void *device, struct tc_position dest, struct tc_position *po
 int libgame_space(void *device, size_t count, TC_SPACE_TYPE type, struct tc_position *pos)
 {
 	libgame_tape * s = (libgame_tape *)device;
-	(void)count;
+	struct tc_position dest = *pos;
 	switch(type)
 	{
  	case TC_SPACE_EOD: // space to end of data on the current partition.
-		pos->block = s->ss.length("index");
+		dest.block = s->parts[pos->partition]->length("index");
 		break;
 	case TC_SPACE_FM_F: // space forward by file marks. // fall-thru
 	case TC_SPACE_FM_B: // space backward by file marks.
 		break;
 	case TC_SPACE_F: // space forward by records.
+		dest.block += count;
 		break;
 	case TC_SPACE_B: // space backward by records.
+		dest.block -= count;
 		break;
 	}
-	pos->early_warning = 0;
-	pos->programmable_early_warning = 0;
-	return 0;
+	return libgame_locate(device, dest, pos);
 }
 
 /**
@@ -442,7 +455,7 @@ int   libgame_unload(void *device, struct tc_position *pos)
 int   libgame_readpos(void *device, struct tc_position *pos)
 {
 	libgame_tape * s = (libgame_tape *)device;
-	pos->block = s->ss.length("index");
+	pos->block = s->parts[pos->partition]->length("index");
 	return 0;
 }
 
@@ -474,12 +487,17 @@ int   libgame_setcap(void *device, uint16_t proportion)
  */
 int   libgame_format(void *device, TC_FORMAT_TYPE format, const char *vol_name, const char *barcode_name, const char *vol_mam_uuid)
 {
-	(void)device;
+	libgame_tape * s = (libgame_tape *)device;
 	(void)format;
 	(void)vol_name;
 	(void)barcode_name;
 	(void)vol_mam_uuid;
-	return -EDEV_UNSUPPORTED_FUNCTION;
+	for (auto & part : s->parts) {
+		if (part->length("index") != 0) {
+			return -EDEV_UNSUPPORTED_FUNCTION;
+		}
+	}
+	return 0;
 }
 
 
@@ -495,9 +513,9 @@ int   libgame_remaining_capacity(void *device, struct tc_remaining_cap *cap)
 {
 	(void)device;
 	cap->remaining_p0 = ~0;
-	cap->remaining_p1 = 0;
+	cap->remaining_p1 = ~0;
 	cap->max_p0 = ~0;
-	cap->max_p1 = 0;
+	cap->max_p1 = ~0;
 	return 0;
 }
 
@@ -694,7 +712,7 @@ int   libgame_write_attribute(void *device, const tape_partition_t part, const u
 int   libgame_allow_overwrite(void *device, const struct tc_position pos)
 {
 	libgame_tape * s = (libgame_tape *)device;
-	if (pos.block == s->ss.length("index"))
+	if (pos.block == s->parts[pos.partition]->length("index"))
 	{
 		return 0;
 	}
@@ -747,9 +765,14 @@ int   libgame_get_cartridge_health(void *device, struct tc_cartridge_health *car
 {
 	libgame_tape * s = (libgame_tape *)device;
 	memset(cart_health, ~0, sizeof(*cart_health));
-	auto lengths = s->ss.lengths();
-	cart_health->written_ds = lengths["index"];
-	cart_health->written_mbytes = lengths["bytes"] / 1024 / 1024;
+	uint64_t total_index=0, total_bytes=0;
+	for (auto & part : s->parts) {
+		auto lengths = part->lengths();
+		total_index += lengths["index"];
+		total_bytes += lengths["bytes"];
+	}
+	cart_health->written_ds = total_index;
+	cart_health->written_mbytes = total_bytes;
 	return 0;
 }
 
