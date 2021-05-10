@@ -417,6 +417,11 @@ public:
 		return tail.identifiers;
 	}
 
+	nlohmann::json identifiers(std::string span, double offset)
+	{
+		return get_node(tail, span, offset).identifiers;
+	}
+
 	std::vector<uint8_t> get(nlohmann::json identifiers, sia::portalpool::worker const * worker = 0)
 	{
 		auto skylink = identifiers["skylink"];

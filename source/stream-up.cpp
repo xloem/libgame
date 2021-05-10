@@ -9,6 +9,7 @@
 
 int main(int argc, char **argv)
 {
+	(void)argc; (void)argv;
 	sia::portalpool pool;
 	skystream stream(pool);
 
