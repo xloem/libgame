@@ -71,23 +71,37 @@ public:
 		root = parts[0]->identifiers("index", 0);
 	}
 
-	void write(const char *buf, size_t count, size_t partition, double index)
+	void write(const char *buf, size_t count, size_t partition, size_t block)
 	{
+		auto & part = *parts[partition];
 		auto filemarks{std::move(pending_filemarks[partition])};
+		auto lengths = part.lengths();
+		double filemark_start = lengths["filemark"];
+		double block_start = lengths["block"];
+		double block_end = block_start + filemarks.size();
+		double index = lengths["index"];
+		if (block != block_end || block_start - filemark_start != index) {
+			throw std::logic_error("block append mismatch");
+		}
+		if (0 != count) {
+			++ block_end;
+		}
+		std::map<std::string, std::pair<double,double>> spans = {
+			{"filemark", {filemark_start, filemark_start + filemarks.size()}},
+			{"block", {block_start, block_end}}
+		};
 		nlohmann::json metadata = {
-			{"number", partition},
-			{"siblings", {}},
-			{"filemarks", filemarks} /* metadata filemarks precede the data */
+			{"number", partition}
 		};
 		for (size_t idx = 0; idx < parts.size(); ++ idx) {
 			if (idx == partition) {
 				continue;
 			}
-			metadata["siblings"][idx] = parts[idx]->identifiers();
+			metadata["siblings"][std::to_string(idx)] = parts[idx]->identifiers();
 		}
-		parts[partition]->write({buf, buf + count}, "index", index, metadata);
+		part.write({buf, buf + count}, "index", index, spans, metadata);
 		//histfile.seekp(0, std::ios_base::end);
-		histfile << parts[partition]->identifiers() << std::endl;
+		histfile << part.identifiers() << std::endl;
 		histfile.flush();
 	}
 
@@ -240,22 +254,37 @@ int   libgame_test_unit_ready(void *device)
  */
 int   libgame_read(void *device, char *buf, size_t count, struct tc_position *pos, const bool unusual_size)
 {
+	/* note/tod: i think the correct behavior for a filemark is to count as an entire read call,
+	 * returning no data but advancing pos->block and pos->filemarks. */
 	libgame_tape * s = (libgame_tape *)device;
 	auto & stream = *s->parts[pos->partition];
 	std::vector<uint8_t> data;
-	try {
-		auto real_size = stream.block_spans("index", pos->block)["bytes"];
-		if (real_size.second - real_size.first != count) {
-			return -EDEV_BUFFER_OVERFLOW; /* is this the right code? */
-		}
-		double index = pos->block;
-		data = stream.read("index", index);
-	} catch (std::out_of_range const &) {
-		data.assign(count, 0);
-	}
-	memcpy(buf, data.data(), data.size());
-	++ pos->block;
 	(void)unusual_size;
+	try {
+		// logic/fence error here where reading the first block does not function correctly?
+		// let's write out the sequence with logic bounds?
+		auto spans = stream.block_spans("block", pos->block);
+		if (spans["filemark"].first != pos->filemarks || spans["block"].first != pos->block) {
+			// corruption / logic error
+			throw std::logic_error("block mismatch");
+			return -EDEV_INVALID_ARG;
+		}
+		if (spans["filemarks"].second > pos->filemarks) {
+			++ pos->filemarks;
+			++ pos->block;
+			return 0;
+		}
+		if (spans["bytes"].second - spans["bytes"].first > count) {
+			return -EDEV_INVALID_ARG;
+		}
+		double block = pos->block;
+		data = stream.read("block", block);
+		++ pos->block;
+		if (pos->block != block) {
+			throw std::logic_error("post-read block mismatch");
+		}
+	} catch (std::out_of_range const &) { }
+	memcpy(buf, data.data(), data.size());
 	return data.size();
 }
 
@@ -300,6 +329,11 @@ int libgame_write(void *device, const char *buf, size_t count, struct tc_positio
 	libgame_tape * s = (libgame_tape *)device;
 	s->write(buf, count, pos->partition, pos->block);
 	++ pos->block;
+	auto lengths = s->parts[pos->partition]->lengths();
+	if (lengths["block"] != pos->block || lengths["filemark"] != pos->filemarks) {
+		throw std::logic_error("write block mismatch");
+		return -EDEV_INVALID_ARG;
+	}
 	pos->early_warning = 0;
 	pos->programmable_early_warning = 0;
 	return 0;
@@ -324,12 +358,23 @@ int libgame_write(void *device, const char *buf, size_t count, struct tc_positio
  */
 int libgame_writefm(void *device, size_t count, struct tc_position *pos, bool immed)
 {
+	// some of this code could be simplified
 	libgame_tape * s = (libgame_tape *)device;
 	if (pos->block != s->parts[pos->partition]->length("index")) {
 		return -EDEV_UNSUPPORTED_FUNCTION;
 	}
 	for (size_t i = 0; i < count; ++ i) {
 		s->pending_filemarks[pos->partition].emplace_back(immed);
+		++ pos->filemarks;
+		++ pos->block;
+	}
+	// comment this out, it will make things much slower for no reason.
+	if (immed) {
+		s->write(nullptr, 0, pos->partition, pos->block);
+		auto lengths = s->parts[pos->partition]->lengths();
+		if (lengths["block"] != pos->block || lengths["filemark"] != pos->filemarks) {
+			throw std::logic_error("post-writefm block mismatch");
+		}
 	}
 	pos->early_warning = 0;
 	pos->programmable_early_warning = 0;
@@ -352,6 +397,7 @@ int   libgame_rewind(void *device, struct tc_position *pos)
 	struct tc_position dest = *pos;
 	dest.block = 0;
 	dest.partition = 0;
+	//dest.filemarks = 0;
 	return libgame_locate(device, dest, pos);
 }
 
@@ -420,6 +466,10 @@ int libgame_locate(void *device, struct tc_position dest, struct tc_position *po
  */
 int libgame_space(void *device, size_t count, TC_SPACE_TYPE type, struct tc_position *pos)
 {
+	/*
+	 * return -EDEV_EOD_DETECTED/-EDEV_BOD_DETECTED if we reach the end of the data.
+	 * records look like they are blocks without filemarks between, unsure.  libltfs does not use record spacing.
+	 */
 	libgame_tape * s = (libgame_tape *)device;
 	auto & part = *s->parts[pos->partition];
 	struct tc_position dest = *pos;
@@ -428,7 +478,7 @@ int libgame_space(void *device, size_t count, TC_SPACE_TYPE type, struct tc_posi
  	case TC_SPACE_EOD: // space to end of data on the current partition.
 		dest.block = part.length("index");
 		break;
-	case TC_SPACE_FM_F: // space forward by file marks. // fall-thru
+	case TC_SPACE_FM_F: // space forward by file marks.
 		while (true) {
 			dest.block += 1;
 			double index = dest.block;
@@ -520,6 +570,7 @@ int   libgame_readpos(void *device, struct tc_position *pos)
 {
 	libgame_tape * s = (libgame_tape *)device;
 	pos->block = s->parts[pos->partition]->length("index");
+	pos->filemarks = s->parts[pos->partition]->length("filemarks");
 	return 0;
 }
 

@@ -87,7 +87,11 @@ public:
 		if (span != "bytes" && offset != content_start) {
 			throw std::runtime_error(span + " " + std::to_string(offset) + " is within block span");
 		}
-		auto data = get(metadata_content["identifiers"], worker);
+		std::vector<uint8_t> data;
+		auto metadata_content_bytes = metadata_content["spans"]["bytes"];
+		if (metadata_content_bytes["start"] != metadata_content_bytes["end"]) {
+			data = get(metadata_content["identifiers"], worker);
+		}
 	
 		auto begin = data.begin() + offset - content_start;
 		// the goal here was, if the span is bytes, to use it as the offset in
@@ -111,9 +115,15 @@ public:
 		read(span, offset, flow, &metadata, worker);
 		return metadata;
 	}
+	// oops, this goes elsewhere: "people don't gain much from making torture communities,"
+	//   "huge groups of people just experiencing punishment to validate punishing."
+	//   "such patterns don't produce anything for a community, themselves, or an individual"
+	//   "so they tend to fade away eventually."
+	//   		[we respond to threats of punishment minimally, in the hope of reconnecting
+	//   		 with our punishers or our habits of them in us, who know how to end it.]
 
 	std::mutex writemtx;
-	void write(std::vector<uint8_t> const & data, std::string span, double offset, nlohmann::json const & user_metadata = {}, sia::portalpool::worker const * worker = 0)
+	void write(std::vector<uint8_t> const & data, std::string span, double offset, std::map<std::string, std::pair<double,double>> const & custom_spans = {}, nlohmann::json const & user_metadata = {}, sia::portalpool::worker const * worker = 0)
 	{
 		std::lock_guard<std::mutex> writelock(writemtx);
 
@@ -173,6 +183,11 @@ public:
 			{"bytes", {{"start", start_bytes},{"end", end_bytes}}},
 			{"index", {{"start", index}, {"end", index + 1}}}
 		};
+		for (auto & span : custom_spans) {
+			if (!spans.contains(span.first)) {
+				spans[span.first] = {{"start", span.second.first}, {"end", span.second.second}};
+			}
+		}
 		// for the case of middle-writing, tail_node is the node containing the end point
 		node * tail_node;
 		// tail_bounds stores the bounds of the tail node, with bytes shifted to accommodate added data
@@ -315,7 +330,7 @@ public:
 
 		auto content_identifiers = cryptography.digests({&data});
 		nlohmann::json metadata_json = {
-			{"sia-skynet-stream", "1.0.11"},
+			{"sia-skynet-stream", "1.0.12"},
 			{"content", {
 				{"spans", spans},
 				{"identifiers", content_identifiers},
