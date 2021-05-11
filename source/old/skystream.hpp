@@ -85,7 +85,7 @@ public:
 		auto metadata_content = metadata["content"];
 		double content_start = metadata_content["spans"][span]["start"];
 		if (span != "bytes" && offset != content_start) {
-			throw std::runtime_error(span + " " + std::to_string(offset) + " is within block span");
+			throw std::runtime_error("ambiguous middle read: " + span + " " + std::to_string(offset) + " is within block span");
 		}
 		std::vector<uint8_t> data;
 		auto metadata_content_bytes = metadata_content["spans"]["bytes"];
@@ -125,6 +125,9 @@ public:
 	std::mutex writemtx;
 	void write(std::vector<uint8_t> const & data, std::string span, double offset, std::map<std::string, std::pair<double,double>> const & custom_spans = {}, nlohmann::json const & user_metadata = {}, sia::portalpool::worker const * worker = 0)
 	{
+		if (data.empty()) {
+			throw std::logic_error("todo: keep lookup nodes consistent when some have no bytes");
+		}
 		std::lock_guard<std::mutex> writelock(writemtx);
 
 		// the current top node is this->tail
@@ -388,10 +391,10 @@ public:
 		tail.metadata = metadata_json;
 	}
 
-	std::map<std::string,std::pair<double,double>> block_spans(std::string span, double offset, sia::portalpool::worker const * worker = 0)
+	std::map<std::string,std::pair<double,double>> block_spans(std::string span, double offset, bool get_preceding = false, sia::portalpool::worker const * worker = 0)
 	{
 		std::lock_guard<std::mutex> lock(methodmtx);
-		auto metadata = this->get_node(tail, span, offset, {}, false, worker).metadata;
+		auto metadata = this->get_node(tail, span, offset, {}, get_preceding, worker).metadata;
 		std::map<std::string,std::pair<double,double>> result;
 		for (auto & content_span : metadata["content"]["spans"].items()) {
 			auto span = content_span.key();
@@ -443,7 +446,8 @@ public:
 
 	double length(std::string span)
 	{
-		return lengths()[span];
+		double spanlength = lengths()[span];
+		return spanlength;
 	}
 
 	nlohmann::json identifiers()

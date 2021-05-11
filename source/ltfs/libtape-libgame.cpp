@@ -5,6 +5,14 @@ extern "C" {
 #include <arpa/inet.h>
 #define ltfs_u16tobe(dest, src) *((uint16_t *)(dest)) = htons((src))
 #define ltfs_u32tobe(dest, src) *((uint32_t *)(dest)) = htonl((src))
+#define ltfs_u64tobe(dest, src) \
+	do { \
+		uint32_t *tmp = (uint32_t *)(dest); \
+		uint64_t stmp = (src); \
+		tmp[0] = htonl((stmp >> 32) & 0xffffffff); \
+		tmp[1] = htonl(stmp & 0xffffffff); \
+	} while (0)
+#define ltfs_betou16(buf) ntohs(*((uint16_t *)(buf)))
 //#include <ltfs/libltfs/ltfs.h>
 #define UNLOCKED_MAM 0
 #define LOCKED_MAM 1
@@ -30,7 +38,6 @@ public:
 		if (!histfile.is_open()) {
 			histfile.open(devname, std::ios::out | std::ios::ate | std::ios::app);
 		}
-		nlohmann::json last_identifiers;
 		std::string line;
 		try {
 			histfile.seekg(-4096, std::ios_base::end);
@@ -41,7 +48,7 @@ public:
 		while (histfile.peek() != EOF) {
 			std::getline(histfile, line);
 			try {
-				last_identifiers = nlohmann::json::parse(line);
+				tip = nlohmann::json::parse(line);
 			} catch (nlohmann::detail::parse_error const &) {}
 		}
 		histfile.clear();
@@ -50,25 +57,30 @@ public:
 
 		pending_filemarks.resize(2);
 
-		if (last_identifiers.is_null()) {
+		if (tip.is_null()) {
 			parts.emplace_back(new skystream(*pool));
 			parts.emplace_back(new skystream(*pool));
-			root = parts[0]->identifiers();
+			root = tip = parts[1]->identifiers();
 			return;
 		}
 
 		std::unique_ptr<skystream> last_stream{new skystream(*pool, last_identifiers)};
-		nlohmann::json last_metadata;
 		double tailidx = last_stream->length("index") - 1;
-		last_stream->read("index", tailidx, "real", &last_metadata);
+		extra_stuff = last_stream->user_metadata("index", tailidx);
 		for (size_t idx = 0; idx < 2; ++ idx) {
-			if (idx == last_metadata["number"]) {
+			if (idx == extra_stuff["number"]) {
 				parts.emplace_back(std::move(last_stream));
 			} else {
-				parts.emplace_back(new skystream(*pool, last_metadata["siblings"][idx]));
+				parts.emplace_back(new skystream(*pool, extra_stuff["siblings"][std::to_string(idx)]));
 			}
 		}
-		root = parts[0]->identifiers("index", 0);
+		extra_stuff.erase("number");
+		extra_stuff.erase("siblings");
+		try {
+			root = parts[0]->identifiers("index", 0);
+		} catch (std::out_of_range const &) {
+			root = parts[1]->identifiers("index", 0);
+		}
 	}
 
 	void write(const char *buf, size_t count, size_t partition, size_t block)
@@ -76,32 +88,53 @@ public:
 		auto & part = *parts[partition];
 		auto filemarks{std::move(pending_filemarks[partition])};
 		auto lengths = part.lengths();
-		double filemark_start = lengths["filemark"];
+		//double filemark_start = lengths["filemark"];
 		double block_start = lengths["block"];
 		double block_end = block_start + filemarks.size();
 		double index = lengths["index"];
-		if (block != block_end || block_start - filemark_start != index) {
+		if (block != block_end /*|| block_start - filemark_start != index ... only valid if no empty data is uploaded */) {
 			throw std::logic_error("block append mismatch");
 		}
 		if (0 != count) {
 			++ block_end;
 		}
 		std::map<std::string, std::pair<double,double>> spans = {
-			{"filemark", {filemark_start, filemark_start + filemarks.size()}},
+			//{"filemark", {filemark_start, filemark_start + filemarks.size()}},
 			{"block", {block_start, block_end}}
 		};
-		nlohmann::json metadata = {
-			{"number", partition}
-		};
+
+		if (! extra_stuff.contains("uuid")) {
+			// search data for <volumeuuid> in first 0x160 bytes
+			std::string needle = "<volumeuuid>";
+			for (
+				size_t tailidx = needle.size();
+				tailidx < 0x200 && tailidx < count;
+				++ tailidx
+			) {
+				size_t idx = tailidx - needle.size();
+				if (0 == memcmp(needle.data(), buf + idx, needle.size())) {
+					char const * ptr = buf + tailidx;
+					extra_stuff["uuid"] = std::string(ptr, ptr + 36);
+					break;
+				}
+			}
+		}
+
+		nlohmann::json metadata = extra_stuff;
+		metadata["number"] = partition;
 		for (size_t idx = 0; idx < parts.size(); ++ idx) {
 			if (idx == partition) {
 				continue;
 			}
 			metadata["siblings"][std::to_string(idx)] = parts[idx]->identifiers();
 		}
+
+		// assertion failed: end block of last part was 1, start block now is 2
 		part.write({buf, buf + count}, "index", index, spans, metadata);
+
 		//histfile.seekp(0, std::ios_base::end);
-		histfile << part.identifiers() << std::endl;
+		tip = part.identifiers();
+		histfile << tip << std::endl;
 		histfile.flush();
 	}
 
@@ -114,12 +147,14 @@ public:
 		return true;
 	}
 
+	nlohmann::json extra_stuff;
 	std::unique_ptr<sia::portalpool> pool;
 	std::string devname;
 	std::fstream histfile;
 	std::vector<std::unique_ptr<skystream>> parts;
 	std::vector<std::vector<bool>> pending_filemarks;
 	nlohmann::json root;
+	nlohmann::json tip;
 };
 
 /**
@@ -254,22 +289,14 @@ int   libgame_test_unit_ready(void *device)
  */
 int   libgame_read(void *device, char *buf, size_t count, struct tc_position *pos, const bool unusual_size)
 {
-	/* note/tod: i think the correct behavior for a filemark is to count as an entire read call,
-	 * returning no data but advancing pos->block and pos->filemarks. */
 	libgame_tape * s = (libgame_tape *)device;
 	auto & stream = *s->parts[pos->partition];
 	std::vector<uint8_t> data;
 	(void)unusual_size;
 	try {
-		// logic/fence error here where reading the first block does not function correctly?
-		// let's write out the sequence with logic bounds?
+		// [... let's write out the sequence with logic bounds?]
 		auto spans = stream.block_spans("block", pos->block);
-		if (spans["filemark"].first != pos->filemarks || spans["block"].first != pos->block) {
-			// corruption / logic error
-			throw std::logic_error("block mismatch");
-			return -EDEV_INVALID_ARG;
-		}
-		if (spans["filemarks"].second > pos->filemarks) {
+		if (pos->block + 1 < spans["block"].second) {
 			++ pos->filemarks;
 			++ pos->block;
 			return 0;
@@ -277,7 +304,7 @@ int   libgame_read(void *device, char *buf, size_t count, struct tc_position *po
 		if (spans["bytes"].second - spans["bytes"].first > count) {
 			return -EDEV_INVALID_ARG;
 		}
-		double block = pos->block;
+		double block = spans["block"].first;
 		data = stream.read("block", block);
 		++ pos->block;
 		if (pos->block != block) {
@@ -330,7 +357,7 @@ int libgame_write(void *device, const char *buf, size_t count, struct tc_positio
 	s->write(buf, count, pos->partition, pos->block);
 	++ pos->block;
 	auto lengths = s->parts[pos->partition]->lengths();
-	if (lengths["block"] != pos->block || lengths["filemark"] != pos->filemarks) {
+	if (lengths["block"] != pos->block/* || lengths["filemark"] != pos->filemarks i think libltfs handles absolute filemarks*/) {
 		throw std::logic_error("write block mismatch");
 		return -EDEV_INVALID_ARG;
 	}
@@ -360,7 +387,7 @@ int libgame_writefm(void *device, size_t count, struct tc_position *pos, bool im
 {
 	// some of this code could be simplified
 	libgame_tape * s = (libgame_tape *)device;
-	if (pos->block != s->parts[pos->partition]->length("index")) {
+	if (pos->block != s->parts[pos->partition]->length("block") + s->pending_filemarks[pos->partition].size()) {
 		return -EDEV_UNSUPPORTED_FUNCTION;
 	}
 	for (size_t i = 0; i < count; ++ i) {
@@ -368,7 +395,7 @@ int libgame_writefm(void *device, size_t count, struct tc_position *pos, bool im
 		++ pos->filemarks;
 		++ pos->block;
 	}
-	// comment this out, it will make things much slower for no reason.
+	/*
 	if (immed) {
 		s->write(nullptr, 0, pos->partition, pos->block);
 		auto lengths = s->parts[pos->partition]->lengths();
@@ -376,6 +403,7 @@ int libgame_writefm(void *device, size_t count, struct tc_position *pos, bool im
 			throw std::logic_error("post-writefm block mismatch");
 		}
 	}
+	*/
 	pos->early_warning = 0;
 	pos->programmable_early_warning = 0;
 	return 0;
@@ -421,12 +449,14 @@ int   libgame_rewind(void *device, struct tc_position *pos)
 int libgame_locate(void *device, struct tc_position dest, struct tc_position *pos)
 {
 	libgame_tape * s = (libgame_tape *)device;
-	try {
-		s->parts[dest.partition]->block_spans("index", dest.block);
-	} catch (std::out_of_range const &) {
-		if (dest.block != 0 || dest.partition > 1) {
-			return -EDEV_INVALID_ARG;
-		}
+	if (dest.partition > 1) {
+		return -EDEV_INVALID_ARG;
+	}
+	auto tail_block = s->parts[dest.partition]->length("block") + s->pending_filemarks[dest.partition].size();
+	if (dest.block >= tail_block) {
+		dest.block = tail_block;
+	} else {
+		s->parts[dest.partition]->block_spans("block", dest.block);
 	}
 	pos->block = dest.block;
 	pos->partition = dest.partition;
@@ -473,27 +503,41 @@ int libgame_space(void *device, size_t count, TC_SPACE_TYPE type, struct tc_posi
 	libgame_tape * s = (libgame_tape *)device;
 	auto & part = *s->parts[pos->partition];
 	struct tc_position dest = *pos;
+	std::pair<double,double> blockspan;
 	switch(type)
 	{
  	case TC_SPACE_EOD: // space to end of data on the current partition.
 		dest.block = part.length("index");
 		break;
 	case TC_SPACE_FM_F: // space forward by file marks.
-		while (true) {
-			dest.block += 1;
-			double index = dest.block;
-			size_t fm = part.user_metadata("index", index)["filemarks"].size();
-			if (fm >= count) { break; }
-			count -= fm;
+		while (count > 0) {
+			auto blockspan = part.block_span("block", dest.block);
+			while (count > 0) {
+				++ dest.block;
+				if (dest.block < blockspan.second) {
+					-- count;
+				} else {
+					break;
+				}
+			}
 		}
 		break;
 	case TC_SPACE_FM_B: // space backward by file marks.
-		while (true) {
-			double index = dest.block;
-			size_t fm = part.user_metadata("index", index)["filemarks"].size();
-			if (fm > count) { break; }
-			dest.block -= 1;
-			count -= fm;
+		if (dest.block > part.length("block")) {
+			dest.block = part.length("block");
+		}
+		while (count > 0) {
+			-- dest.block;
+			blockspan = part.block_span("block", dest.block);
+			do {
+				if (dest.block < blockspan.second - 1) {
+					-- count;
+					if (count == 0) {
+						break;
+					}
+				}
+				-- dest.block;
+			} while (dest.block >= blockspan.first);
 		}
 		break;
 	case TC_SPACE_F: // space forward by records.
@@ -570,7 +614,7 @@ int   libgame_readpos(void *device, struct tc_position *pos)
 {
 	libgame_tape * s = (libgame_tape *)device;
 	pos->block = s->parts[pos->partition]->length("index");
-	pos->filemarks = s->parts[pos->partition]->length("filemarks");
+	//pos->filemarks = s->parts[pos->partition]->length("filemarks"); libltlfs handles absolute filemarks
 	return 0;
 }
 
@@ -603,10 +647,18 @@ int   libgame_setcap(void *device, uint16_t proportion)
 int   libgame_format(void *device, TC_FORMAT_TYPE format, const char *vol_name, const char *barcode_name, const char *vol_mam_uuid)
 {
 	libgame_tape * s = (libgame_tape *)device;
-	(void)format;
-	(void)vol_name;
-	(void)barcode_name;
-	(void)vol_mam_uuid;
+	if (format != TC_FORMAT_DEST_PART) {
+		throw std::runtime_error("although it is way easier to implement only 1 partition, i thought libltfs only did 2 partitios");
+	}
+	if (vol_name) {
+		s->extra_stuff["vol"] = vol_name;
+	}
+	if (barcode_name) {
+		s->extra_stuff["barcode"] = barcode_name;
+	}
+	if (vol_mam_uuid) {
+		s->extra_stuff["uuid"] = vol_mam_uuid;
+	}
 	if (!s->empty()) {
 		return -EDEV_UNSUPPORTED_FUNCTION;
 	}
@@ -801,18 +853,32 @@ int   libgame_allow_medium_removal(void *device)
  */
 int   libgame_read_attribute(void *device, const tape_partition_t part, const uint16_t id, unsigned char *buf, const size_t size)
 {
-	(void)device;
+	libgame_tape * s = (libgame_tape *)device;
+	uint64_t total_index = s->parts[0]->length("index") + s->parts[1]->length("index");
+	std::string uuid;
 	(void)part;
 	memset(buf, 0, size);
+	ltfs_u16tobe(buf, id);
+	ltfs_u16tobe(buf + 3, size - TC_MAM_PAGE_HEADER_SIZE);
 	switch (id)
 	{
 	case TC_MAM_LOCKED_MAM:
 		ltfs_u16tobe(buf, TC_MAM_LOCKED_MAM);
-		ltfs_u16tobe(buf + 3, TC_MAM_LOCKED_MAM_SIZE);
 		buf[TC_MAM_PAGE_HEADER_SIZE] = LOCKED_MAM;
 		return 0;
 	case TC_MAM_PAGE_VCR:
-		ltfs_u32tobe(buf + 5, UINT32_MAX);
+		ltfs_u32tobe(buf + 5, (total_index % 0x8fffffff) + 1);
+		return 0;
+	case TC_MAM_PAGE_COHERENCY:
+		buf[5] = 8; /* volume change ref size, libltfs only supports 8 */
+		ltfs_u64tobe(buf + 6, total_index); /* volume_change_ref, vwj from the drive */
+		ltfs_u64tobe(buf + 14, total_index); /* count, generation of index */
+		ltfs_u64tobe(buf + 22, total_index); /* set_id, position of index */
+		ltfs_u16tobe(buf + 30, 43); /* ap_client_specific_len */
+		memcpy(buf + 32, "LTFS", 4);
+		uuid = s->extra_stuff["uuid"];
+		memcpy(buf + 37, uuid.c_str(), 37);
+		buf[74] = 2; // version, i made 2 up
 		return 0;
 	default:
 		return -EDEV_UNSUPPORTED_FUNCTION;
@@ -834,10 +900,17 @@ int   libgame_read_attribute(void *device, const tape_partition_t part, const ui
  */
 int   libgame_write_attribute(void *device, const tape_partition_t part, const unsigned char *buf, const size_t size)
 {
-	(void)device;
+	libgame_tape * s = (libgame_tape *)device;
+	uint16_t type = ltfs_betou16(buf);
+	//uint8_t format = attr_data[2];
 	(void)part;
-	(void)buf;
 	(void)size;
+	switch(type)
+	{
+	case TC_MAM_PAGE_COHERENCY:
+		s->extra_stuff["uuid"] = std::string(buf + 37, buf + 37 + 37);
+		break;
+	}
 	return 0;//-EDEV_UNSUPPORTED_FUNCTION;
 }
 
@@ -1004,7 +1077,8 @@ int   libgame_get_eod_status(void *device, int part)
 {
 	(void)device;
 	(void)part;
-	return -EDEV_UNSUPPORTED_FUNCTION;
+	return EOD_GOOD;
+	//return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 
@@ -1157,7 +1231,7 @@ int   libgame_get_worm_status(void *device, bool *is_worm)
 int   libgame_get_serialnumber(void *device, char **result)
 {
 	libgame_tape * s = (libgame_tape *)device;
-	std::string serial = s->root.dump();
+	std::string serial = s->tip.dump(); //s->root.dump();
 	*result = (char*)malloc(serial.size() + 1);
 	memcpy(*result, serial.c_str(), serial.size() + 1);
 	return 0;
