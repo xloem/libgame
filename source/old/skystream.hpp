@@ -80,7 +80,7 @@ public:
 	std::vector<uint8_t> read(std::string span, double & offset, std::string flow = "real", nlohmann::json * user_metadata = nullptr, sia::portalpool::worker const * worker = 0)
 	{
 		(void)flow;
-		auto metadata = this->get_node(tail, span, offset, {}, worker).metadata;
+		auto metadata = this->get_node(tail, span, offset, {}, false, worker).metadata;
 		std::lock_guard<std::mutex> lock(methodmtx);
 		auto metadata_content = metadata["content"];
 		double content_start = metadata_content["spans"][span]["start"];
@@ -134,7 +134,8 @@ public:
 		seconds_t start_time = tail.metadata["content"]["spans"]["time"]["end"];
 		
 		// for the case of middle-writing, head_node is the node containing the start point
-		node * head_node;
+		node * head_node; // contains start point
+		//node * outer_head_node; // precedes start point
 		// head_bounds stores the bounds of the head node, with bytes shifted to accommodate added data
 		nlohmann::json head_bounds;
 		unsigned long long start_bytes;
@@ -146,13 +147,14 @@ public:
 			// append case, no head node to replace
 			start_bytes = tail.metadata["content"]["spans"]["bytes"]["end"];
 			head_node = &tail;
+			//outer_head_node = &tail;
 			head_bounds = head_node->metadata["content"]["bounds"];
 			//full_size = data.size();
 		} else {
 			// non-append: find head node
 
 			nlohmann::json head_node_bounds;
-			head_node = &get_node(this->tail, span, offset, {}, worker);
+			head_node = &get_node(this->tail, span, offset, {}, false, worker);
 			auto head_node_content = head_node->metadata["content"];
 			double start_head = head_node_content["bounds"][span]["start"];
 
@@ -193,7 +195,7 @@ public:
 		// tail_bounds stores the bounds of the tail node, with bytes shifted to accommodate added data
 		nlohmann::json tail_bounds;
 		try {
-			tail_node = &get_node(tail, "bytes", end_bytes, {}, worker);
+			tail_node = &get_node(tail, "bytes", end_bytes, {}, false, worker);
 			auto tail_node_content = tail_node->metadata["content"];
 			if (end_bytes != tail_node_content["bounds"]["bytes"]["start"]) {
 				for (auto bound : tail_node_content["bounds"].items()) {
@@ -219,10 +221,14 @@ public:
 		node preceding;
 		lookup_nodes.clear();
 		if (start_bytes > 0) { try {
-			preceding = this->get_node(tail, "bytes", start_bytes - 1, {}, worker); // preceding 
+			// ideally here we would get a node that has the span of interest aligned.  since that is where the user wants to put their data.
+			preceding = this->get_node(tail, "bytes", start_bytes, {}, true, worker); // preceding 
 			new_lookup_node = preceding.metadata["content"];
 			new_lookup_node["identifiers"] = preceding.identifiers;
 			new_lookup_node["depth"] = 0;
+			// todo: the new lookup node has both bounds and spans.
+			// this is both verbose and insufficient to calculate subranges of interest
+			
 			lookup_nodes = preceding.metadata["lookup"]; // everything in lookup nodes is accessible via preceding's identifiers
 			lookup_nodes.emplace_back(new_lookup_node);
 		} catch (std::out_of_range const &) { } }
@@ -283,7 +289,8 @@ public:
 
 					auto & current_end = current_span["end"];
 					auto & next_end = next_span["end"];
-					assert (current_end == next_span["start"]);
+					auto & next_start = next_span["start"];
+					assert (current_end == next_start);
 					if (current_end < next_end) { current_end = next_end; }
 				}
 				current_node["identifiers"] = preceding.identifiers;
@@ -384,7 +391,7 @@ public:
 	std::map<std::string,std::pair<double,double>> block_spans(std::string span, double offset, sia::portalpool::worker const * worker = 0)
 	{
 		std::lock_guard<std::mutex> lock(methodmtx);
-		auto metadata = this->get_node(tail, span, offset, {}, worker).metadata;
+		auto metadata = this->get_node(tail, span, offset, {}, false, worker).metadata;
 		std::map<std::string,std::pair<double,double>> result;
 		for (auto & content_span : metadata["content"]["spans"].items()) {
 			auto span = content_span.key();
@@ -445,9 +452,9 @@ public:
 		return tail.identifiers;
 	}
 
-	nlohmann::json identifiers(std::string span, double offset)
+	nlohmann::json identifiers(std::string span, double offset, bool get_preceding = false)
 	{
-		return get_node(tail, span, offset).identifiers;
+		return get_node(tail, span, offset, {}, get_preceding).identifiers;
 	}
 
 	std::vector<uint8_t> get(nlohmann::json identifiers, sia::portalpool::worker const * worker = 0)
@@ -476,11 +483,14 @@ private:
 		nlohmann::json metadata;
 	};
 
-	node & get_node(node & start, std::string span, double offset, nlohmann::json bounds = {}, sia::portalpool::worker const * worker = 0)
+	node & get_node(node & start, std::string span, double offset, nlohmann::json bounds = {}, bool get_preceding = false, sia::portalpool::worker const * worker = 0)
 	{
 		auto content_spans = start.metadata["content"]["spans"];
 		auto content_span = content_spans[span];
-		if (offset >= content_span["start"] && offset < content_span["end"]) {
+		if (get_preceding
+			? (offset > content_span["start"] && offset <= content_span["end"])
+			: (offset >= content_span["start"] && offset < content_span["end"])
+		) {
 			start.metadata["content"]["bounds"] = bounds.is_null() ? content_spans : bounds;
 			return start;
 		}
@@ -499,13 +509,16 @@ private:
 			auto lookup_span = lookup["spans"][span];
 			double start = lookup_span["start"];
 			double end = lookup_span["end"];
-			if (offset >= start && offset < end) {
+			if (get_preceding
+				? (offset > start && offset <= end)
+				: (offset >= start && offset < end)
+			) {
 				auto identifiers = lookup["identifiers"];
 				std::string identifier = identifiers.begin().value();
 				if (!cache.count(identifier)) {
 					cache[identifier] = node{identifiers, get_json(identifiers, nullptr, worker)};
 				}
-				return get_node(cache[identifier], span, offset, lookup_spans);
+				return get_node(cache[identifier], span, offset, lookup_spans, get_preceding, worker);
 			}
 		}
 		throw std::out_of_range(span + " " + std::to_string(offset) + " out of range");
