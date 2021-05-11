@@ -37,7 +37,7 @@ int main(int argc, char **argv)
 			}
 			suboffset += size;
 		}
-		offset += data.size();
+		// offset += data.size(); // the read call already adds to offset
 	}
 	return 0;
 }
