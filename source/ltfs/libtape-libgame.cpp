@@ -59,9 +59,9 @@ public:
 
 		std::unique_ptr<skystream> last_stream{new skystream(*pool, last_identifiers)};
 		nlohmann::json last_metadata;
-		double tailidx = parts[0]->length("index");
+		double tailidx = last_stream->length("index") - 1;
 		last_stream->read("index", tailidx, "real", &last_metadata);
-		for (size_t idx = 0; idx < 1 + last_metadata["siblings"].size(); ++ idx) {
+		for (size_t idx = 0; idx < 2; ++ idx) {
 			if (idx == last_metadata["number"]) {
 				parts.emplace_back(std::move(last_stream));
 			} else {
