@@ -105,6 +105,13 @@ public:
 		return {begin, end};
 	}
 
+	nlohmann::json user_metadata(std::string span, double & offset, std::string flow = "real", sia::portalpool::worker const * worker = 0)
+	{
+		nlohmann::json metadata;
+		read(span, offset, flow, &metadata, worker);
+		return metadata;
+	}
+
 	std::mutex writemtx;
 	void write(std::vector<uint8_t> const & data, std::string span, double offset, nlohmann::json const & user_metadata = {}, sia::portalpool::worker const * worker = 0)
 	{
@@ -308,7 +315,7 @@ public:
 
 		auto content_identifiers = cryptography.digests({&data});
 		nlohmann::json metadata_json = {
-			{"sia-skynet-stream", "1.0.10"},
+			{"sia-skynet-stream", "1.0.11"},
 			{"content", {
 				{"spans", spans},
 				{"identifiers", content_identifiers},

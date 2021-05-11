@@ -1,6 +1,15 @@
 extern "C" {
 #include <ltfs/libltfs/tape_ops.h>
 #include <ltfs/libltfs/ltfs_error.h>
+//#include <ltfs/libltfs/ltfs_endian.h>
+#include <arpa/inet.h>
+#define ltfs_u16tobe(dest, src) *((uint16_t *)(dest)) = htons((src))
+#define ltfs_u32tobe(dest, src) *((uint32_t *)(dest)) = htonl((src))
+//#include <ltfs/libltfs/ltfs.h>
+#define UNLOCKED_MAM 0
+#define LOCKED_MAM 1
+//#include <ltfs/tape_drivers/tape_drivers.h>
+#define TC_MP_JM 0xB4 /* IBM TS11x0 JM cartridge */
 }
 #include "../old/skystream.hpp"
 
@@ -13,26 +22,42 @@ class libgame_tape
 {
 public:
 	libgame_tape(char const *historyfilename)
-	: devname(historyfilename),
-	  histfile(devname)
+	: devname(historyfilename)
 	{
+		histfile.open(devname, std::ios::in | std::ios::out | std::ios::ate);
+		histfile.clear();
+		histfile.exceptions(std::fstream::badbit | std::fstream::failbit);
+		if (!histfile.is_open()) {
+			histfile.open(devname, std::ios::out | std::ios::ate | std::ios::app);
+		}
 		nlohmann::json last_identifiers;
+		std::string line;
 		try {
-
 			histfile.seekg(-4096, std::ios_base::end);
-			while (histfile.peek() != EOF) {
-				last_identifiers = nlohmann::json::parse(histfile);
-			}
-		} catch (nlohmann::detail::parse_error const &) { }
+		} catch (std::exception const &) {
+			histfile.clear();
+			histfile.seekg(0, std::ios_base::beg);
+		}
+		while (histfile.peek() != EOF) {
+			std::getline(histfile, line);
+			try {
+				last_identifiers = nlohmann::json::parse(line);
+			} catch (nlohmann::detail::parse_error const &) {}
+		}
+		histfile.clear();
+
+		pool.reset(new sia::portalpool());
+
+		pending_filemarks.resize(2);
 
 		if (last_identifiers.is_null()) {
-			parts.emplace_back(new skystream(pool));
-			parts.emplace_back(new skystream(pool));
+			parts.emplace_back(new skystream(*pool));
+			parts.emplace_back(new skystream(*pool));
 			root = parts[0]->identifiers();
 			return;
 		}
 
-		std::unique_ptr<skystream> last_stream{new skystream(pool, last_identifiers)};
+		std::unique_ptr<skystream> last_stream{new skystream(*pool, last_identifiers)};
 		nlohmann::json last_metadata;
 		double tailidx = parts[0]->length("index");
 		last_stream->read("index", tailidx, "real", &last_metadata);
@@ -40,7 +65,7 @@ public:
 			if (idx == last_metadata["number"]) {
 				parts.emplace_back(std::move(last_stream));
 			} else {
-				parts.emplace_back(new skystream(pool, last_metadata["siblings"][idx]));
+				parts.emplace_back(new skystream(*pool, last_metadata["siblings"][idx]));
 			}
 		}
 		root = parts[0]->identifiers("index", 0);
@@ -48,24 +73,38 @@ public:
 
 	void write(const char *buf, size_t count, size_t partition, double index)
 	{
+		auto filemarks{std::move(pending_filemarks[partition])};
 		nlohmann::json metadata = {
-			{"number", partition}
+			{"number", partition},
+			{"siblings", {}},
+			{"filemarks", filemarks} /* metadata filemarks precede the data */
 		};
 		for (size_t idx = 0; idx < parts.size(); ++ idx) {
 			if (idx == partition) {
 				continue;
 			}
-			metadata[idx] = parts[idx]->identifiers();
+			metadata["siblings"][idx] = parts[idx]->identifiers();
 		}
 		parts[partition]->write({buf, buf + count}, "index", index, metadata);
-		histfile.seekg(0, std::ios_base::end);
-		histfile << parts[partition]->identifiers();
+		//histfile.seekp(0, std::ios_base::end);
+		histfile << parts[partition]->identifiers() << std::endl;
+		histfile.flush();
 	}
 
-	sia::portalpool pool;
+	bool empty() {
+		for (auto & part : parts) {
+			if (part->length("index") != 0) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	std::unique_ptr<sia::portalpool> pool;
 	std::string devname;
 	std::fstream histfile;
 	std::vector<std::unique_ptr<skystream>> parts;
+	std::vector<std::vector<bool>> pending_filemarks;
 	nlohmann::json root;
 };
 
@@ -203,12 +242,17 @@ int   libgame_read(void *device, char *buf, size_t count, struct tc_position *po
 {
 	libgame_tape * s = (libgame_tape *)device;
 	auto & stream = *s->parts[pos->partition];
-	auto real_size = stream.block_spans("index", pos->block)["bytes"];
-	if (real_size.second - real_size.first > count) {
-		return -EDEV_BUFFER_OVERFLOW; /* is this the right code? */
+	std::vector<uint8_t> data;
+	try {
+		auto real_size = stream.block_spans("index", pos->block)["bytes"];
+		if (real_size.second - real_size.first != count) {
+			return -EDEV_BUFFER_OVERFLOW; /* is this the right code? */
+		}
+		double index = pos->block;
+		data = stream.read("index", index);
+	} catch (std::out_of_range const &) {
+		data.assign(count, 0);
 	}
-	double index = pos->block;
-	auto data = stream.read("index", index);
 	memcpy(buf, data.data(), data.size());
 	++ pos->block;
 	(void)unusual_size;
@@ -280,12 +324,16 @@ int libgame_write(void *device, const char *buf, size_t count, struct tc_positio
  */
 int libgame_writefm(void *device, size_t count, struct tc_position *pos, bool immed)
 {
-	(void)device;
-	(void)count;
-	(void)immed;
+	libgame_tape * s = (libgame_tape *)device;
+	if (pos->block != s->parts[pos->partition]->length("index")) {
+		return -EDEV_UNSUPPORTED_FUNCTION;
+	}
+	for (size_t i = 0; i < count; ++ i) {
+		s->pending_filemarks[pos->partition].emplace_back(immed);
+	}
 	pos->early_warning = 0;
 	pos->programmable_early_warning = 0;
-	return -EDEV_UNSUPPORTED_FUNCTION;
+	return 0;
 }
 
 /**
@@ -373,14 +421,30 @@ int libgame_locate(void *device, struct tc_position dest, struct tc_position *po
 int libgame_space(void *device, size_t count, TC_SPACE_TYPE type, struct tc_position *pos)
 {
 	libgame_tape * s = (libgame_tape *)device;
+	auto & part = *s->parts[pos->partition];
 	struct tc_position dest = *pos;
 	switch(type)
 	{
  	case TC_SPACE_EOD: // space to end of data on the current partition.
-		dest.block = s->parts[pos->partition]->length("index");
+		dest.block = part.length("index");
 		break;
 	case TC_SPACE_FM_F: // space forward by file marks. // fall-thru
+		while (true) {
+			dest.block += 1;
+			double index = dest.block;
+			size_t fm = part.user_metadata("index", index)["filemarks"].size();
+			if (fm >= count) { break; }
+			count -= fm;
+		}
+		break;
 	case TC_SPACE_FM_B: // space backward by file marks.
+		while (true) {
+			double index = dest.block;
+			size_t fm = part.user_metadata("index", index)["filemarks"].size();
+			if (fm > count) { break; }
+			dest.block -= 1;
+			count -= fm;
+		}
 		break;
 	case TC_SPACE_F: // space forward by records.
 		dest.block += count;
@@ -441,7 +505,7 @@ int   libgame_unload(void *device, struct tc_position *pos)
 {
 	(void)device;
 	pos->block = ~0;
-	return -EDEV_UNSUPPORTED_FUNCTION;
+	return 0;// -EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -470,7 +534,7 @@ int   libgame_setcap(void *device, uint16_t proportion)
 {
 	(void)device;
 	(void)proportion;
-	return -EDEV_UNSUPPORTED_FUNCTION;
+	return 0;
 }
 
 /**
@@ -492,10 +556,8 @@ int   libgame_format(void *device, TC_FORMAT_TYPE format, const char *vol_name, 
 	(void)vol_name;
 	(void)barcode_name;
 	(void)vol_mam_uuid;
-	for (auto & part : s->parts) {
-		if (part->length("index") != 0) {
-			return -EDEV_UNSUPPORTED_FUNCTION;
-		}
+	if (!s->empty()) {
+		return -EDEV_UNSUPPORTED_FUNCTION;
 	}
 	return 0;
 }
@@ -556,7 +618,9 @@ int   libgame_logsense(void *device, const uint8_t page, const uint8_t subpage,
  */
 int   libgame_modesense(void *device, const uint8_t page, const TC_MP_PC_TYPE pc, const uint8_t subpage, unsigned char *buf, const size_t size)
 {
+	libgame_tape * s = (libgame_tape *)device;
 	memset(buf, 0, size);
+	buf[16] = page;
 	switch (page)
 	{
 	case TC_MP_DEV_CONFIG_EXT:
@@ -566,9 +630,27 @@ int   libgame_modesense(void *device, const uint8_t page, const TC_MP_PC_TYPE pc
 			switch (subpage)
 			{
 			case 0x01:
-				buf[16] = page;
 				buf[21] |= 0x10; // append-only mode
 				buf[22] = buf[23] = 0; // pews threshold
+				return size;
+			default:
+				break;
+			}
+			break;
+		default:
+			break;
+		}
+		break;
+	case TC_MP_MEDIUM_PARTITION:
+		switch (pc)
+		{
+		case TC_MP_PC_CURRENT:
+			switch (subpage)
+			{
+			case 0x00:
+				if (s->empty()) {
+					buf[2] = TC_MP_JM; // IBM TS11x0 JM, reformattable
+				}
 				return size;
 			default:
 				break;
@@ -581,10 +663,6 @@ int   libgame_modesense(void *device, const uint8_t page, const TC_MP_PC_TYPE pc
 	default:
 		break;
 	}
-	(void)device;
-	(void)page;
-	(void)pc;
-	(void)subpage;
 	return -EDEV_UNSUPPORTED_FUNCTION;
 }
 
@@ -674,9 +752,20 @@ int   libgame_read_attribute(void *device, const tape_partition_t part, const ui
 {
 	(void)device;
 	(void)part;
-	(void)id;
 	memset(buf, 0, size);
-	return -EDEV_UNSUPPORTED_FUNCTION;
+	switch (id)
+	{
+	case TC_MAM_LOCKED_MAM:
+		ltfs_u16tobe(buf, TC_MAM_LOCKED_MAM);
+		ltfs_u16tobe(buf + 3, TC_MAM_LOCKED_MAM_SIZE);
+		buf[TC_MAM_PAGE_HEADER_SIZE] = LOCKED_MAM;
+		return 0;
+	case TC_MAM_PAGE_VCR:
+		ltfs_u32tobe(buf + 5, UINT32_MAX);
+		return 0;
+	default:
+		return -EDEV_UNSUPPORTED_FUNCTION;
+	}
 }
 
 /**
@@ -698,7 +787,7 @@ int   libgame_write_attribute(void *device, const tape_partition_t part, const u
 	(void)part;
 	(void)buf;
 	(void)size;
-	return -EDEV_UNSUPPORTED_FUNCTION;
+	return 0;//-EDEV_UNSUPPORTED_FUNCTION;
 }
 
 /**
@@ -920,7 +1009,7 @@ int   libgame_parse_opts(void *device, void *opt_args)
  */
 const char *libgame_default_device_name(void)
 {
-	return "default.libtape-libgame.json";
+	return "libgame-ltfs.ndjson";
 }
 
 /**
@@ -990,7 +1079,7 @@ int   libgame_is_mountable(void *device,
 	(void)barcode;
 	(void)cart_type;
 	(void)density;
-	return 0;
+	return MEDIUM_PERFECT_MATCH;
 }
 
 /**

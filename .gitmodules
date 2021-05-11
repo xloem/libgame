@@ -30,3 +30,6 @@
 [submodule "dependencies/icu"]
 	path = dependencies/icu
 	url = https://github.com/unicode-org/icu.git
+[submodule "dependencies/ltfs"]
+	path = dependencies/ltfs
+	url = https://github.com/LinearTapeFileSystem/ltfs.git
