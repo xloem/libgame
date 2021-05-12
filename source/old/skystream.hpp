@@ -14,15 +14,16 @@
 #include "crypto.hpp"
 
 /*
- * The way to do random writes is to reference the previous tree as underlying data,
- * and then include metadata for all the blocks that cannot be accessed in the number of
- * requests equal to the height of the tree.  This means iterating through all the chunks, and
- * it means outputting data with holes in it.  Iteration is sped by using depth attribute to skip.
- *
- * The tree is deepened when both the leaf count increases, and the last tail was balanced:
- * i.e. its lookup_nodes list had two disparate nodes each with the same depth one less than its.
- * The leaf count increases when the data written does not precisely align with a previous chunk.
- *
+ * I think the algorithm for redepthing the trees may have been designed in error.
+ * i'm somewhat confused.  it's hard to consider whether or not the trees become roughly balanced.
+ */
+
+/*
+ * . later: lookup nodes may shift (or stretch) data by specifying a subspan within.
+ *          for now, they assume spans are in the same coordinate space.
+ */
+
+/*
  * In the case of append-only, this simplifies to the same dat-inspired algorithm.
  *
  * TODO after: make an interface function that provides for many random writes at once, and
@@ -68,8 +69,10 @@ public:
 							{"bytes", {{"start", 0}, {"end", 0}}}
 						//}}
 					}}
-				}}//,
+				}},
+				{"lookup", nlohmann::json::array()}//,
 				//{"flows", {}}
+				
 			};
 		}
 	}
@@ -126,58 +129,42 @@ public:
 	void write(std::vector<uint8_t> const & data, std::string span, double offset, std::map<std::string, std::pair<double,double>> const & custom_spans = {}, nlohmann::json const & user_metadata = {}, sia::portalpool::worker const * worker = 0)
 	{
 		if (data.empty()) {
-			throw std::logic_error("todo: keep lookup nodes consistent when some have no bytes");
+			throw std::logic_error("todo: verify lookup nodes are consistent when some have no bytes");
 		}
 		std::lock_guard<std::mutex> writelock(writemtx);
+		bool extra_leaf = false;
 
 		// the current top node is this->tail
 		
 		std::unique_lock<std::mutex> lock(methodmtx);
 		seconds_t end_time = time();
 		seconds_t start_time = tail.metadata["content"]["spans"]["time"]["end"];
-		
-		// for the case of middle-writing, head_node is the node containing the start point
-		node * head_node; // contains start point
-		//node * outer_head_node; // precedes start point
-		// head_bounds stores the bounds of the head node, with bytes shifted to accommodate added data
-		nlohmann::json head_bounds;
+
 		unsigned long long start_bytes;
-		// calculate start index (index always increments)
+		// calculate start index (index always increments);
 		unsigned long long index = tail.metadata["content"]["spans"]["index"]["end"];
 		// calculate start bytes
 		// TODO: these cases can be merged by catching out of bounds for head node
 		if (offset == tail.metadata["content"]["spans"][span]["end"]) {
 			// append case, no head node to replace
 			start_bytes = tail.metadata["content"]["spans"]["bytes"]["end"];
-			head_node = &tail;
-			//outer_head_node = &tail;
-			head_bounds = head_node->metadata["content"]["bounds"];
-			//full_size = data.size();
+			extra_leaf = true;
 		} else {
 			// non-append: find head node
-
-			nlohmann::json head_node_bounds;
-			head_node = &get_node(this->tail, span, offset, {}, false, worker);
-			auto head_node_content = head_node->metadata["content"];
+			auto & head_node = get_node(this->tail, span, offset, {}, false, worker);
+			auto head_node_content = head_node.metadata["content"];
 			double start_head = head_node_content["bounds"][span]["start"];
-
 			if (span == "bytes") {
 				start_bytes = offset;
+				if (offset != start_head) {
+					extra_leaf = true;
+				}
 			} else {
 				if (offset != start_head) {
 					// throw here because we don't know how spans might interpolate inside data.  user would have to provide all spans.
 					throw std::runtime_error(span + " " + std::to_string(offset) + " is within block span");
 				}
 				start_bytes = head_node_content["bounds"]["bytes"]["start"]; 
-			}
-
-			// fill head_bounds, adjusting bytes to remove the bit we replaced.
-			for (auto bound : head_node_content["bounds"].items()) {
-				if (bound.key() == "bytes") {
-					head_bounds["bytes"] = {{"start", bound.value()["start"]},{"end", start_bytes}};
-				} else {
-					head_bounds[bound.key()] = {{"start", bound.value()["start"]},{"end", bound.value()["end"]}};
-				}
 			}
 		}
 		// calculate end bytes
@@ -193,59 +180,63 @@ public:
 				spans[span.first] = {{"start", span.second.first}, {"end", span.second.second}};
 			}
 		}
-		// for the case of middle-writing, tail_node is the node containing the end point
-		node * tail_node;
-		// tail_bounds stores the bounds of the tail node, with bytes shifted to accommodate added data
-		nlohmann::json tail_bounds;
+
 		try {
-			tail_node = &get_node(tail, "bytes", end_bytes, {}, false, worker);
-			auto tail_node_content = tail_node->metadata["content"];
+			auto & tail_node = get_node(tail, "bytes", end_bytes, {}, false, worker);
+			auto tail_node_content = tail_node.metadata["content"];
 			if (end_bytes != tail_node_content["bounds"]["bytes"]["start"]) {
-				for (auto bound : tail_node_content["bounds"].items()) {
-					if (bound.key() == "bytes") {
-						tail_bounds["bytes"] = {{"start", end_bytes},{"end", bound.value()["end"]}};
-					} else {
-						tail_bounds[bound.key()] = {{"start", bound.value()["start"]},{"end", bound.value()["end"]}};
-					}
-				}
-			} else {
-				tail_bounds = tail_node->metadata["content"]["bounds"];
+				extra_leaf = true;
 			}
 		} catch (std::out_of_range const &) {
-			tail_node = &tail;
-			tail_bounds = tail_node->metadata["content"]["bounds"];
+			extra_leaf = true;
+		}
+		
+		/* find the desired tree depth */
+		size_t depth = 0;
+		nlohmann::json old_lookup_nodes = tail.metadata["lookup"];
+		bool full_tree = old_lookup_nodes.empty() ? true : false;
+		for (auto & node : old_lookup_nodes) {
+			auto subdepth = node["depth"];
+			if (subdepth > depth) {
+				depth = subdepth;
+				full_tree = false;
+			} else if (subdepth == depth) {
+				full_tree = true;
+			}
 		}
 
-		// todo: when finding new lookup nodes, we just consolidate the old ones
-		// when the depth is reasonable
-		nlohmann::json lookup_nodes = nlohmann::json::array();
-		//size_t depth = 0;
-		nlohmann::json new_lookup_node;
-		node preceding;
-		lookup_nodes.clear();
-		if (start_bytes > 0) { try {
-			// ideally here we would get a node that has the span of interest aligned.  since that is where the user wants to put their data.
-			preceding = this->get_node(tail, "bytes", start_bytes, {}, true, worker); // preceding 
-			new_lookup_node = preceding.metadata["content"];
-			new_lookup_node["identifiers"] = preceding.identifiers;
-			new_lookup_node["depth"] = 0;
-			// todo: the new lookup node has both bounds and spans.
-			// this is both verbose and insufficient to calculate subranges of interest
-			
-			lookup_nodes = preceding.metadata["lookup"]; // everything in lookup nodes is accessible via preceding's identifiers
-			lookup_nodes.emplace_back(new_lookup_node);
-		} catch (std::out_of_range const &) { } }
+		/* insert tail lookup node */
+		old_lookup_nodes = node_with_lookup(tail, 0);
 
-		// 8: we have a new way of merging lookup nodes.  we merge all adjacent pairs with equal depth, repeatedly.
-		// this means below algorithm should change to add new_lookup_node first, and then merge after adding.
-		for (size_t index = 0; index + 1 < lookup_nodes.size();) {
-			auto & current_node = lookup_nodes[index];
-			auto & next_node = lookup_nodes[index + 1];
-			if (current_node["depth"] == next_node["depth"]) {
-				auto next_spans = next_node["spans"];
-				for (auto & span : current_node["spans"].items()) {
-					auto & current_span = span.value();
-					auto & next_span = next_spans[span.key()];
+		/* increment depth if tree is full and leaf is added.
+		 * a leaf is not added when a block is precisely overwritten.
+		 */
+		if (full_tree && extra_leaf) {
+			++ depth;
+		}
+
+		/* redepth / rebalance the nodes */
+		nlohmann::json new_lookup_nodes = redepthed_lookup(old_lookup_nodes, depth, tail, worker);
+		old_lookup_nodes = new_lookup_nodes;
+		new_lookup_nodes = nlohmann::json::array();
+
+		/* break existing lookup nodes around the data */
+		nlohmann::json prev_bound;
+		for (auto & new_data_span :  {spans, nlohmann::json()}) {
+				/* if adding multiple data, move content to within lookup nodes for simplicity */
+			auto sublookup = sliced_lookup(old_lookup_nodes, prev_bound, new_data_span);
+			// this is where the lookup lists are concatenated all together around middle writes.
+			// this means checking for continuity needs to involve attached data.
+			for (auto & lookup_item : sublookup) {
+				new_lookup_nodes[new_lookup_nodes.size()] = lookup_item;
+			}
+			prev_bound = new_data_span;
+		}
+					// the below plan was deprioritised in favor of middle
+					// writes.  the plan involved tracking different "flows"
+					// so that data could have different parallel orderings,
+					// e.g. a logical and a time-wise ordering might be in
+					// different flows.
 					// 10: we're changing the format to use "flows" of "real" and "logic" as below
 					// 		[this change is at the edge of checks for likely-to-finish-task.  this is known.
 					// 		 so, no more generalization until something is working and usable.]
@@ -289,21 +280,8 @@ public:
 					//}
 
 					// NOTE: we need to update identifiers of lookup_nodes to point to something that contains both
-
-					auto & current_end = current_span["end"];
-					auto & next_end = next_span["end"];
-					auto & next_start = next_span["start"];
-					assert (current_end == next_start);
-					if (current_end < next_end) { current_end = next_end; }
-				}
-				current_node["identifiers"] = preceding.identifiers;
-				current_node["depth"] = (unsigned long long)current_node["depth"] + 1;
-				lookup_nodes.erase(index + 1);
-			} else {
-				++ index;
-			}
-		}
-		// 9: this is old implementation, below loop.  9: above loop is wip new implementation
+					//
+		// 9: this is old original implementation, below loop, before multiple rewrites
 		/*
 		while (lookup_nodes.size() && lookup_nodes.back()["depth"] == depth) {
 			auto & back = lookup_nodes.back();
@@ -323,20 +301,6 @@ public:
 
 		// end: we can make a new tail metadata node that indexes everything afterward.  it can even have tree nodes if desired.
 		// 5: remaining before testing: build lookup nodes using three more sources in 1-2-3 order
-		//  1. if !head_bounds.is_null(), then add a lookup reference for head
-			// note: we can't merge this lookup node with previous because it is the only one with a link to its content.
-		if (!head_bounds.is_null()) {
-			lookup_nodes.emplace_back(nlohmann::json{
-				{"identifiers", head_node->identifiers},
-				{"spans", head_bounds},
-				{"depth", 0} // now .... will this get merged if we append to tail after this?
-						// when appending we assuming depth reduces forward, which is no longer true.
-						// we probably want to reduce depth within as well as forward.
-			});
-		}
-
-		//  2. if !tail_bounds.is_null(), then add a lookup reference for tail
-		//  3. reference node hierarchies until real tail to complete reference to rest of doc
 
 		auto content_identifiers = cryptography.digests({&data});
 		nlohmann::json metadata_json = {
@@ -347,11 +311,11 @@ public:
 			}},
 			/* 10:
 			{"flow", { 
-				{"logical", lookup_nodes},
+				{"logical", new_lookup_nodes},
 				{"creation", append_only_lookup_nodes_of_time_and_index}
 			}},
 			*/
-			{"lookup", lookup_nodes}
+			{"lookup", new_lookup_nodes}
 		};
 		if (! user_metadata.is_null()) {
 			metadata_json["metadata"] = user_metadata;
@@ -361,6 +325,11 @@ public:
 
 		sia::skynet::upload_data metadata_upload("metadata.json", std::vector<uint8_t>{metadata_string.begin(), metadata_string.end()}, "application/json");
 		sia::skynet::upload_data content("content", data, "application/octet-stream");
+
+		// note: the numbered changes scattered around are left over from the flows idea.
+		// keeping them is only as a reminder to make it stable to have spans with
+		// different ordering.  this would be clearer and computer-checkable if the "flows"
+		// syntax were used.
 
 		// CHANGE 3C: let's try to reuse all surrounding data using the new 'bounds' attribute
 		// 3C: TODO: we want to insert into content from head_node if we are doing a midway-write (full_size above).  we could also split the write into two.
@@ -384,6 +353,7 @@ public:
 		upload2.join();
 		lock.lock();
 		metadata_identifiers["skylink"] = skylink + "/" + metadata_upload.filename;
+		metadata_json["content"]["identifiers"]["skylink"] = skylink + "/" + content.filename;
 
 		// if we want to support threading we'll likely need a lock around this whole function (not just the change to tail)
 		// 	later: i've done that, but haven't integrated with old stuff to simplify
@@ -491,6 +461,7 @@ private:
 	{
 		auto content_spans = start.metadata["content"]["spans"];
 		auto content_span = content_spans[span];
+		std::cout << "get_node " << span << " " << content_span << " " << start.metadata["content"]["identifiers"]["skylink"] << std::endl;
 		if (get_preceding
 			? (offset > content_span["start"] && offset <= content_span["end"])
 			: (offset >= content_span["start"] && offset < content_span["end"])
@@ -518,11 +489,7 @@ private:
 				: (offset >= start && offset < end)
 			) {
 				auto identifiers = lookup["identifiers"];
-				std::string identifier = identifiers.begin().value();
-				if (!cache.count(identifier)) {
-					cache[identifier] = node{identifiers, get_json(identifiers, nullptr, worker)};
-				}
-				return get_node(cache[identifier], span, offset, lookup_spans, get_preceding, worker);
+				return get_node(cached_node(identifiers, worker), span, offset, lookup_spans, get_preceding, worker);
 			}
 		}
 		throw std::out_of_range(span + " " + std::to_string(offset) + " out of range");
@@ -540,10 +507,177 @@ private:
 		return result;
 	}
 
-	//nlohmann::json lookup_nodes(node & source, nlohmann::json & bounds)
-	//{
-	//	// to do this right, consider that source's content may be in the middle of its lookups.  so you want to put it in the right spot.
-	//}
+	/*** todo later: this would be simpler if all the data content were included in the lookup nodes list.  this special handling then might not be needed. ***/
+	nlohmann::json node_with_lookup(node const & additional_node, size_t node_depth)
+	{			/* node_depth is 1 + max depth of lookup nodes of this node */
+		bool inserted = false;
+		nlohmann::json additional_item = {
+			{"identifiers", additional_node.identifiers},
+			{"spans", additional_node.metadata["content"]["spans"]},
+			{"depth", node_depth}
+		};
+		nlohmann::json new_lookup_nodes = nlohmann::json::array();
+		for (auto & node : additional_node.metadata["lookup"]) {
+			if (node["spans"]["bytes"]["start"] == additional_node.metadata["content"]["spans"]["bytes"]["end"]) {
+				new_lookup_nodes[new_lookup_nodes.size()] = additional_item;
+				inserted = true;
+			}
+			new_lookup_nodes[new_lookup_nodes.size()] = node;
+		}
+		if (!inserted) {
+			new_lookup_nodes[new_lookup_nodes.size()] = additional_item;
+		}
+		return new_lookup_nodes;
+	}
+
+	nlohmann::json sliced_lookup(nlohmann::json const & old_list, nlohmann::json const & prev_spans = {}, nlohmann::json const & next_spans = {})
+	{
+		nlohmann::json new_list = nlohmann::json::array();
+		for (nlohmann::json const & item : old_list) {
+			nlohmann::json new_spans;
+			for (auto & span_pair : item["spans"].items()) {
+				auto & name = span_pair.key();
+				auto & span = span_pair.value();
+				auto prev_span = prev_spans.is_null() ? nlohmann::json{} : prev_spans[name];
+				auto next_span = next_spans.is_null() ? nlohmann::json{} : next_spans[name];
+				nlohmann::json new_span = {
+					{"start", span["start"]},
+					{"end", span["end"]}
+				};
+				if (next_span.is_null() && prev_span.is_null()) {
+					// if span is not in "next" nor in "prev" then i suppose we discard since multiple slicing could overlap
+					continue;
+				}
+				if (!prev_span.is_null()) {
+					// we discard things that have their "end" prior to prev's "end"
+					if (span["end"] <= prev_span["end"]) {
+						new_spans = {}; break;
+					}
+					// if "start" is prior to prev's "end", we trim "start"
+					if (span["start"] < prev_span["end"]) {
+						new_span["start"] = prev_span["end"];
+					}
+				}
+				if (!next_span.is_null()) {
+					// we discard things that have their "start" after to next's "start"
+					if (span["start"] >= next_span["start"]) {
+						new_spans = {}; break;
+					}
+					// if "end" is after next's "start", we trim "end"
+					if (span["end"] > next_span["start"]) {
+						new_span["end"] = next_span["start"];
+					}
+				}
+				new_spans[name] = new_span;
+			}
+			if (! new_spans.is_null()) {
+				new_list[new_list.size()] = {
+					{"identifiers", item["identifiers"]},
+					{"depth", item["depth"]},
+					{"spans", new_spans}
+				};
+			}
+		}
+		return new_list;
+	}
+
+		// ===================================
+		/* it's looking like old_list will go away and be retrieved from wrapping_tail.
+		 * notably wrapping_tail also includes the area that old_list leaves out, in
+		 * its content. */
+		// ===================================
+	nlohmann::json redepthed_lookup(nlohmann::json const & old_list, size_t stored_depth, node const & wrapping_tail, sia::portalpool::worker const * worker = 0)
+	{
+		// hopefully this algorithm is improvable if needed
+		// we are always rereferencing the top node or copying straight in, but maybe middle nodes could be referenced instead to reduce total size and depth.  maybe this is appropriate when neighbor nodes are contained within the same outer node.
+		
+		nlohmann::json new_list = nlohmann::json::array();
+		for (auto & item : old_list) {
+			size_t itemdepth = item["depth"];
+			if (itemdepth < stored_depth && item["identifiers"] != wrapping_tail.identifiers) {
+				/* todo? this should probably go in the condensing loop.
+				 * then depth can be compared with neighbor.  if two neighbors
+				 * have differing depths, one of them could be possibly shallowed or
+				 * deepened to unite them.
+				 */
+				/* todo? to reduce deepening, maybe this case should go in the
+				 * condensing loop below, and only replace if it is condensable.
+				 * or maybe it would be simpler to tag it as re-expandable, and
+				 * then re-expand it in another loop for now. */
+					/* basically there are some nodes that can be raised
+					 * or lowered in order to unit them with neighboring
+					 * nodes. this is not being done. when united, we
+					 * want them wrapped by tail nodes to do so.
+					 * otherwise, we want them shallow for speedy access.
+					 */
+				/* there's a clear algorithm here, maybe think about in
+				 * spare time.  how to unite these nodes in a moving tree,
+				 * basically to rebalance the tree. */
+				new_list[new_list.size()] = {
+					{"identifiers", wrapping_tail.identifiers },
+					{"depth", itemdepth + 1},
+					{"spans", item["spans"]}
+				};
+			} else if (itemdepth > stored_depth) {
+				auto & itemnode = cached_node(item["identifiers"]);
+				nlohmann::json prev_bound, next_bound;
+				for (auto & span : item["spans"].items()) {
+					prev_bound[span.key()]["end"] = span.value()["start"];
+					next_bound[span.key()]["start"] = span.value()["end"];
+				}
+				auto subnodes = redepthed_lookup(
+					sliced_lookup(
+						node_with_lookup(itemnode, 0),
+						prev_bound,
+						next_bound
+					),
+					stored_depth,
+					itemnode,
+					worker
+				);
+				for (auto const & subitem : subnodes) {
+					new_list[new_list.size()] = subitem;
+				}
+			} else {
+				new_list[new_list.size()] = item;
+			}
+		}
+		nlohmann::json condensed_list = nlohmann::json::array();
+		for (auto & next : new_list) {
+			if (!condensed_list.empty()) {
+				auto & prev = condensed_list.back();
+				if (prev["identifiers"] == next["identifiers"]) {
+					size_t prevdepth = prev["depth"];
+					size_t nextdepth = next["depth"];
+					prev["depth"] = prevdepth > nextdepth ? prevdepth : nextdepth;
+					for (auto & span : next["spans"].items()) {
+						if (prev["spans"].contains(span.key())) {
+							auto & prev_end = prev["spans"][span.key()]["end"];
+							auto & next_end = span.value()["end"];
+							auto & next_start = span.value()["start"];
+							assert (prev_end == next_start);
+							prev_end = next_end;
+						} else {
+							prev["spans"][span.key()] = span.value();
+						}
+					}
+					continue;
+				}
+			}
+			condensed_list[condensed_list.size()] = next;
+		}
+		return condensed_list;
+	}
+
+	node & cached_node(nlohmann::json const & identifiers, sia::portalpool::worker const * worker = 0)
+	{
+		std::string identifier = identifiers.begin().value();
+		if (!cache.count(identifier)) {
+			cache[identifier] = node{identifiers, get_json(identifiers, nullptr, worker)};
+			std::cout << "cache node " << identifier << ": " << cache[identifier].metadata["content"]["identifiers"]["skylink"] << std::endl;
+		}
+		return cache[identifier];
+	}
 
 	crypto cryptography;
 	node tail;

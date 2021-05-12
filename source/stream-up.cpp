@@ -9,11 +9,14 @@
 
 int main(int argc, char **argv)
 {
-	(void)argc; (void)argv;
 	sia::portalpool pool;
-	skystream stream(pool);
+	nlohmann::json identifiers;
+	if (argc > 1) {
+		identifiers["skylink"] = argv[1];
+	}
+	skystream stream(pool, identifiers);
 
-	unsigned long long offset = 0;
+	unsigned long long offset = stream.length("bytes");
 
 	std::vector<uint8_t> data;
 	data.reserve(1024 * 1024 * 16);

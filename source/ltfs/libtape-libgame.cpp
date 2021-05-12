@@ -64,7 +64,7 @@ public:
 			return;
 		}
 
-		std::unique_ptr<skystream> last_stream{new skystream(*pool, last_identifiers)};
+		std::unique_ptr<skystream> last_stream{new skystream(*pool, tip)};
 		double tailidx = last_stream->length("index") - 1;
 		extra_stuff = last_stream->user_metadata("index", tailidx);
 		for (size_t idx = 0; idx < 2; ++ idx) {
