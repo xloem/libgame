@@ -911,7 +911,7 @@ int   libgame_write_attribute(void *device, const tape_partition_t part, const u
 	switch(type)
 	{
 	case TC_MAM_PAGE_COHERENCY:
-		s->extra_stuff["uuid"] = std::string(buf + 37, buf + 37 + 37);
+		s->extra_stuff["uuid"] = std::string(buf + 37, buf + 37 + 36);
 		break;
 	}
 	return 0;//-EDEV_UNSUPPORTED_FUNCTION;

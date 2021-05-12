@@ -16,6 +16,9 @@
 /*
  * I think the algorithm for redepthing the trees may have been designed in error.
  * i'm somewhat confused.  it's hard to consider whether or not the trees become roughly balanced.
+ *
+ * 	- it might help encourage tree balance to squash all lists of children that have
+ * 	  only 1 child within their outer span, so as to have multiple ones.
  */
 
 /*
