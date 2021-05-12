@@ -461,7 +461,7 @@ private:
 	{
 		auto content_spans = start.metadata["content"]["spans"];
 		auto content_span = content_spans[span];
-		std::cout << "get_node " << span << " " << content_span << " " << start.metadata["content"]["identifiers"]["skylink"] << std::endl;
+		//std::cout << "get_node " << span << " " << content_span << " " << start.metadata["content"]["identifiers"]["skylink"] << std::endl;
 		if (get_preceding
 			? (offset > content_span["start"] && offset <= content_span["end"])
 			: (offset >= content_span["start"] && offset < content_span["end"])
@@ -674,7 +674,7 @@ private:
 		std::string identifier = identifiers.begin().value();
 		if (!cache.count(identifier)) {
 			cache[identifier] = node{identifiers, get_json(identifiers, nullptr, worker)};
-			std::cout << "cache node " << identifier << ": " << cache[identifier].metadata["content"]["identifiers"]["skylink"] << std::endl;
+			//std::cout << "cache node " << identifier << ": " << cache[identifier].metadata["content"]["identifiers"]["skylink"] << std::endl;
 		}
 		return cache[identifier];
 	}
