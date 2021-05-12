@@ -302,9 +302,11 @@ public:
 		// end: we can make a new tail metadata node that indexes everything afterward.  it can even have tree nodes if desired.
 		// 5: remaining before testing: build lookup nodes using three more sources in 1-2-3 order
 
+		sia::skynet::upload_data content("content", data, "application/octet-stream");
 		auto content_identifiers = cryptography.digests({&data});
+		content_identifiers["relpath"] = "/" + content.filename;
 		nlohmann::json metadata_json = {
-			{"sia-skynet-stream", "1.0.12"},
+			{"sia-skynet-stream", "1.0.13"},
 			{"content", {
 				{"spans", spans},
 				{"identifiers", content_identifiers},
@@ -324,7 +326,6 @@ public:
 		//std::cerr << metadata_string << std::endl;
 
 		sia::skynet::upload_data metadata_upload("metadata.json", std::vector<uint8_t>{metadata_string.begin(), metadata_string.end()}, "application/json");
-		sia::skynet::upload_data content("content", data, "application/octet-stream");
 
 		// note: the numbered changes scattered around are left over from the flows idea.
 		// keeping them is only as a reminder to make it stable to have spans with
