@@ -19,6 +19,9 @@
  *
  * 	- it might help encourage tree balance to squash all lists of children that have
  * 	  only 1 child within their outer span, so as to have multiple ones.
+ * 	  generalises to a behavior of 'shallowing'; subspans should gain a depth of
+ * 	  their shallowest children, and lose interim nodes with only one surrounding child,
+ * 	  or with the same or greater children than a node below
  */
 
 /*
