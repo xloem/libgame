@@ -34,5 +34,5 @@
 	path = dependencies/ltfs
 	url = https://github.com/LinearTapeFileSystem/ltfs.git
 [submodule "deps/openssl"]
-	path = deps/openssl
+	path = dependencies/openssl
 	url = https://github.com/open-quantum-safe/openssl.git
