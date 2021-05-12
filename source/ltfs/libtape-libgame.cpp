@@ -134,6 +134,9 @@ public:
 
 		//histfile.seekp(0, std::ios_base::end);
 		tip = part.identifiers();
+		auto new_spans = part.spans();
+		tip["time"] = new_spans["time"].second;
+		tip["bytes"] = uint64_t(new_spans["bytes"].second);
 		histfile << tip << std::endl;
 		histfile.flush();
 	}
