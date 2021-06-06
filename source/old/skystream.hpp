@@ -328,6 +328,10 @@ public:
 		if (! user_metadata.is_null()) {
 			metadata_json["metadata"] = user_metadata;
 		}
+		if (! queued_log.is_null()) {
+			metadata_json["log"] = queued_log;
+			queued_log = {};
+		}
 		std::string metadata_string = metadata_json.dump();
 		//std::cerr << metadata_string << std::endl;
 
@@ -441,15 +445,20 @@ public:
 	std::vector<uint8_t> get(nlohmann::json identifiers, sia::portalpool::worker const * worker = 0)
 	{
 		auto skylink = identifiers["skylink"];
-		std::vector<uint8_t> result = portalpool.download(skylink, {}, 1024*1024*64, false, worker).data;
-		auto digests = cryptography.digests({&result});
-		for (auto & digest : digests.items()) {
-			if (identifiers.contains(digest.key())) {
-				if (digest.value() != identifiers[digest.key()]) {
-					throw std::runtime_error(digest.key() + " digest mismatch.  identifiers=" + identifiers.dump() + " digests=" + digests.dump());
+		auto check_digests = [&](sia::portalpool::worker const * worker, sia::skynet::response const & skynet_result) {
+			auto digests = cryptography.digests({&skynet_result.data});
+			bool found_intact = true;
+			for (auto & digest : digests.items()) {
+				if (identifiers.contains(digest.key())) {
+					if (digest.value() != identifiers[digest.key()]) {
+						found_intact = false;
+						log(worker->portal->options.url + " " + std::string(skylink) + " " + digest.key() + " digest " + std::string(digest.value()) + " calculated wrong");
+					}
 				}
 			}
-		}
+			return found_intact;
+		};
+		std::vector<uint8_t> result = portalpool.download(skylink, {}, 1024*1024*64, false, worker, check_digests).data;
 		return result;
 	}
 
@@ -686,9 +695,21 @@ private:
 		return cache[identifier];
 	}
 
+	void log(nlohmann::json data)
+	{
+		seconds_t now = time();
+		if (queued_log.is_null()) {
+			queued_log = nlohmann::json::array();
+		}
+		data = nlohmann::json({now, data});
+		std::cerr << data << std::endl;
+		queued_log.emplace_back(data);
+	}
+
 	crypto cryptography;
 	node tail;
 	std::unordered_map<std::string, node> cache;
+	nlohmann::json queued_log;
 };
 
 /*

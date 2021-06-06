@@ -10,8 +10,10 @@ namespace sia {
 class portalpool {
 public:
 	portalpool(double bytes_bandwidth_down = 256, double bytes_bandwidth_up = 256, size_t connections_down = 8, size_t connections_up = 4)
-	: bandwidth{bytes_bandwidth_down / connections_down, bytes_bandwidth_up / connections_up}
+	: bandwidth{bytes_bandwidth_down / connections_down, bytes_bandwidth_up / connections_up},
+	  multiportal{(std::cerr << "Measuring speed of skynet portals .." << std::endl,std::chrono::seconds(15))}
 	{
+		std::cerr << "Done measuring initial portals." << std::endl;
 		for (size_t i = 0; i < connections_down; ++ i) {
 			workers[skynet_multiportal::download].emplace_back(worker{i, std::unique_ptr<skynet>(new skynet()), {}});
 			free[skynet_multiportal::download].push_back(i);
@@ -58,7 +60,7 @@ public:
 		worker_free.notify_all();
 	}
 
-	skynet::response download(std::string const & skylink, std::initializer_list<std::pair<size_t, size_t>> ranges = {}, size_t maxsize = 1024*1024*64, bool fail = false, worker const * w = 0)
+	skynet::response download(std::string const & skylink, std::initializer_list<std::pair<size_t, size_t>> ranges = {}, size_t maxsize = 1024*1024*64, bool fail = false, worker const * w = 0, std::function<bool(worker const *, skynet::response const &)> validator = {})
 	{
 		auto timeout = std::chrono::milliseconds((unsigned long)(1000 * maxsize / bandwidth[skynet_multiportal::download]));
 
@@ -71,6 +73,11 @@ public:
 			try {
 				workstart(worker, skynet_multiportal::download);
 				result = worker->portal->download(skylink, ranges, timeout);
+				if (validator) {
+					if (!validator(worker, result)) {
+						throw std::runtime_error("result failed validation");
+					}
+				}
 				workstop(worker, result.data.size() + result.filename.size());
 				break;
 			} catch(std::runtime_error const & e) {

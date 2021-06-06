@@ -104,10 +104,17 @@ public:
     (void)fi;
     double offset_d = offset;
     try {
-      std::vector<uint8_t> data = file.read("bytes", offset_d);
-      count = std::min(count, data.size());
-      memcpy(buf, data.data(), count);
-      return data.size();
+      size_t remaining = count;
+      while (remaining) {
+        std::vector<uint8_t> data = file.read("bytes", offset_d);
+        if (data.size() > remaining) {
+          data.resize(remaining);
+        }
+        memcpy(buf, data.data(), data.size());
+        buf += data.size();
+        remaining -= data.size();
+      }
+      return count;
     } catch (std::out_of_range &) {
       return 0;
     }
@@ -131,7 +138,7 @@ public:
     histfile << file.identifiers() << std::endl;
     histfile.flush();
     if (offset + count > (off_t)length) {
-	    length = offset + count;
+      length = offset + count;
     }
     time = file.span("time").second;
     return count;
