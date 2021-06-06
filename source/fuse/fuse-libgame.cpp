@@ -11,6 +11,7 @@ public:
   std::fstream histfile;
   skystream file;
   uint64_t length;
+  double time;
   int mode;
 
   nlohmann::json process_device(std::string device) {
@@ -48,7 +49,7 @@ public:
     return tip;
   }
 
-  libgame_fuse(std::string device) : file(pool, process_device(device)), length(file.length("bytes")), mode(0644) {}
+  libgame_fuse(std::string device) : file(pool, process_device(device)), length(file.length("bytes")), time(file.span("time").second), mode(0644) {}
 
   /* reading functions */
 
@@ -63,6 +64,9 @@ public:
     } else if (pathname.substr(0,4) == "/sia") {
       st->st_mode = S_IFREG | (mode ^ umask);
       st->st_size = length;
+      double seconds;
+      st->st_mtim.tv_nsec = 1000000000 * modf(time, &seconds);
+      st->st_mtime = seconds;
       return 0;
     } else {
       return -ENOENT;
@@ -74,6 +78,7 @@ public:
     struct stat st;
     (void)off;
     (void)fi;
+    (void)flags;
     if (pathname != "/") {
       return -ENOENT;
     }
@@ -83,11 +88,11 @@ public:
 	    name = identifiers["skylink"];
 	    size_t idx1 = name.find("://");
 	    size_t idx2 = name.find('/', idx1 + 3);
-	    name = "/sia:" + name.substr(idx1 + 3, idx2 - idx1 - 3);
+	    name = "sia:" + name.substr(idx1 + 3, idx2 - idx1 - 3);
     } else {
-	    name = "/sia:new";
+	    name = "sia:new";
     }
-    if (0 == getattr(name, &st)) {
+    if (0 == getattr("/" + name, &st)) {
       fill_dir(name, &st);
     }
     return 0;
@@ -125,6 +130,10 @@ public:
     file.write({buf, buf + count}, "bytes", offset, {}, {});
     histfile << file.identifiers() << std::endl;
     histfile.flush();
+    if (offset + count > (off_t)length) {
+	    length = offset + count;
+    }
+    time = file.span("time").second;
     return count;
   }
 };
