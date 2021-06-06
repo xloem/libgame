@@ -33,3 +33,6 @@
 [submodule "dependencies/ltfs"]
 	path = dependencies/ltfs
 	url = https://github.com/LinearTapeFileSystem/ltfs.git
+[submodule "dependencies/fuse++"]
+	path = dependencies/fuse++
+	url = https://github.com/xloem/fusexx
