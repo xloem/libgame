@@ -29,3 +29,6 @@ add_executable (old-stream-down source/stream-down.cpp)
 
 add_library (tape-libgame SHARED source/ltfs/libtape-libgame.cpp)
 install (TARGETS tape-libgame LIBRARY DESTINATION lib/ltfs)
+
+add_executable (fuse-libgame source/fuse/fuse-libgame.cpp)
+target_link_libraries (fuse-libgame fuse++)

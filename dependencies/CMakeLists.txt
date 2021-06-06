@@ -1,13 +1,34 @@
+include(ExternalProject)
+
 # populate
 find_package(Git QUIET)
-#execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
-#                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+			dependencies/ltfs
+			dependencies/siaskynetpp
+			dependencies/fuse++
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # siaskynetpp
 add_subdirectory(siaskynetpp)
 
+# fuse++
+add_subdirectory(fuse++)
+
 # at the moment, nlohmann::json is inside siaskynetpp already
 set (JSON_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/siaskynetpp/dependencies/json/include PARENT_SCOPE)
+
+# libltfs
+#add_library(ltfs INTERFACE)
+#	ExternalProject_add(
+#		ltfs_submodule SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ltfs
+#		PATCH_COMMAND ./autogen.sh CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR>
+#		BUILD_COMMAND make INSTALL_COMMAND make install
+#	)
+#	ExternalProject_Get_Property(ltfs_submodule INSTALL_DIR)
+#	link_directories(${INSTALL_DIR}/lib)
+#	target_include_directories(ltfs INTERFACE ${INSTALL_DIR}/include)
+#
+#	add_dependencies(ltfs ltfs_submodule)
 
 # libbitcoin
 find_program(LIBTOOLIZE libtoolize)
@@ -30,7 +51,6 @@ set (EXTERNAL_MAKE_FLAGS "-j2" CACHE STRING "flags passed to make for external p
 
 #set (LIBBITCOIN_LIBRARIES bitcoin-system CACHE INTERNAL "")
 
-#include(ExternalProject)
 #ExternalProject_Add(libsecp256k1
 #	SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libsecp256k1
 #	DOWNLOAD_COMMAND cd <SOURCE_DIR> && ./autogen.sh

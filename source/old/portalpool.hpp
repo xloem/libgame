@@ -9,7 +9,7 @@ namespace sia {
 
 class portalpool {
 public:
-	portalpool(double bytes_bandwidth_down = 1024, double bytes_bandwidth_up = 1024, size_t connections_down = 8, size_t connections_up = 4)
+	portalpool(double bytes_bandwidth_down = 256, double bytes_bandwidth_up = 256, size_t connections_down = 8, size_t connections_up = 4)
 	: bandwidth{bytes_bandwidth_down / connections_down, bytes_bandwidth_up / connections_up}
 	{
 		for (size_t i = 0; i < connections_down; ++ i) {
