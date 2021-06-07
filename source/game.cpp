@@ -96,7 +96,8 @@ public:
 			throw std::runtime_error("failed to connect to " + server);
 		}
 
-		client.set_on_update(std::bind(&ashesofshreddeddocument::on_update, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+		on_update_static = std::bind(&ashesofshreddeddocument::on_update, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
+		client.set_on_update(on_update_static);
 		libbitcoinasync("subscribe address", &Client::subscribe_address, address);
 
 		// get all utxos
@@ -192,6 +193,7 @@ private:
 	libbitcoin::wallet::payment_address address;
 	libbitcoin::chain::point_value::list utxos;
 
+	std::function<void(libbitcoin::code const &, uint16_t, size_t, libbitcoin::hash_digest const &)> on_update_static;
 	void on_update(libbitcoin::code const & code, uint16_t sequence, size_t height, libbitcoin::hash_digest const & hash_digest)
 	{
 		std::cout << code << " " << sequence << " " << height << libbitcoin::encode_hash(hash_digest) << std::endl;
@@ -202,7 +204,7 @@ private:
 
 int main()
 {
-	string test_string = "Have fun retaining any information at all!";
+	string test_string = "Have fun not destroying an important document!";
 	vector<uint8_t> test_data(test_string.begin(), test_string.end());
 
 	//std::string cryptkey = ashesofshreddeddocument::new_encrypted_user("Caring behavior is more precious than anything else.");
