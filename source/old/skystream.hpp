@@ -103,14 +103,7 @@ public:
 		}
 	
 		auto begin = data.begin() + offset - content_start;
-		// the goal here was, if the span is bytes, to use it as the offset in
-		// otherwise, to just return the whole chunk
-		auto end = begin;
-		if (span == "bytes") {
-			end += (uint64_t)metadata_content["bounds"]["bytes"]["end"] - content_start;
-		} else {
-			end = data.end();
-		}
+		auto end = data.end();
 		offset = metadata_content["bounds"][span]["end"];
 		if (nullptr != user_metadata) {
 			*user_metadata = metadata["metadata"];
@@ -554,6 +547,9 @@ private:
 			for (auto & span_pair : item["spans"].items()) {
 				auto & name = span_pair.key();
 				auto & span = span_pair.value();
+				if (!prev_spans.contains(name) || !next_spans.contains(name)) {
+					continue;
+				}
 				auto prev_span = prev_spans.is_null() ? nlohmann::json{} : prev_spans[name];
 				auto next_span = next_spans.is_null() ? nlohmann::json{} : next_spans[name];
 				nlohmann::json new_span = {

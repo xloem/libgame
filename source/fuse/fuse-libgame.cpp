@@ -110,8 +110,7 @@ public:
         if (data.size() > remaining) {
           data.resize(remaining);
         }
-        memcpy(buf, data.data(), data.size());
-        buf += data.size();
+        memcpy(buf + count - remaining, data.data(), data.size());
         remaining -= data.size();
       }
       return count;
