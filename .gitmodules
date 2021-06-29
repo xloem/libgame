@@ -36,3 +36,6 @@
 [submodule "dependencies/fuse++"]
 	path = dependencies/fuse++
 	url = https://github.com/xloem/fusexx
+[submodule "dependencies/lotus++"]
+	path = dependencies/lotus++
+	url = https://github.com/xloem/lotuspp.git
